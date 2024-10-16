@@ -24,7 +24,7 @@
 #pragma config MCLRE = ON
 #pragma config PWRTE = OFF
 #pragma config LPBOREN = OFF
-#pragma config BOREN = OFF
+#pragma config BOREN = SBOREN
 #pragma config BORV = LO
 #pragma config ZCD = OFF
 #pragma config PPS1WAY = OFF
@@ -20142,14 +20142,24 @@ double yn(int, double);
 
 
 
+typedef enum
+{
+    CLK_SLOW,
+    CLK_MED,
+    CLK_FAST
+} clock_speed_t;
+
+typedef void (*func_t)(void);
+
 
 
 static _Bool mUnhandledSystemTick = 0;
 
-
-static _Bool mSystemFastClock = 0;
+static clock_speed_t mSystemClock = CLK_SLOW;
 
 static uint8_t mLedCounter = 0;
+
+static func_t mpTimerExpireCallback = ((void*)0);
 
 
 
@@ -20162,12 +20172,15 @@ void setup(void)
 
 
     PORTB = 0;
+    PORTA = 0;
 
 
-    TRISBbits.TRISB0 = 0;
+    TRISB = 0b11100100;
+    TRISA = 0b11011111;
 
 
-    ANSELBbits.ANSB0 = 0;
+    ANSELB = 0b11100100;
+    ANSELA = 0b11011111;
 
 
     SLRCONB = 0xFF;
@@ -20178,14 +20191,17 @@ void setup(void)
 
 
     T0CON1bits.T0CS = 0b0100;
-    T0CON1bits.T0CKPS = 0b1001;
+    T0CON1bits.T0CKPS = 0b0101;
     T0CON0bits.T0OUTPS = 0;
     T0EN = 0;
     TMR0IF = 0;
     TMR0IE = 1;
-    TMR0L = 0;
-    TMR0H = 1;
+    TMR0H = 96;
+    TMR0L = TMR0H - 1;
 
+
+    T6CLKCON = 0x04;
+    T6CONbits.CKPS = 0b100;
 
 
     OSCFRQbits.HFFRQ = 0b101;
@@ -20204,7 +20220,6 @@ void setup(void)
     WDTCON0bits.SWDTEN = 1;
 
 
-    T0EN = 1;
 }
 
 
@@ -20213,7 +20228,14 @@ void setup(void)
 void switchSystemClock(_Bool fast)
 {
 
-    if (fast == mSystemFastClock)
+    if (fast &&
+        CLK_FAST == mSystemClock)
+    {
+        return;
+    }
+
+    if (!fast &&
+        CLK_SLOW == mSystemClock)
     {
         return;
     }
@@ -20223,41 +20245,129 @@ void switchSystemClock(_Bool fast)
 
 
 
-        mSystemFastClock = 1;
+        mSystemClock = CLK_FAST;
 
 
 
+        OSCFRQ = 0b101;
         OSCCON1 = 0b110 << 4 | 0b0000;
-        while (!OSCCON3bits.ORDY);
+
+
+
     }
     else
     {
 
+        if (mpTimerExpireCallback)
+        {
+            mSystemClock = CLK_MED;
 
 
-        mSystemFastClock = 0;
+            OSCFRQ = 0b000;
 
 
-        OSCCON1 = 0b101 << 4 | 0b0001;
+
+        }
+        else
+        {
+
+
+
+            mSystemClock = CLK_SLOW;
+
+
+            OSCCON1 = 0b101 << 4 | 0b0001;
+
+        }
     }
 }
+
+
+static void turnOffAllLeds(void)
+{
+    PORTB = 0;
+}
+
+static void backdrivePulseOver(void)
+{
+    PORTA = 0;
+}
+
+
+
+static void timer_once(func_t pCallback, uint8_t milliseconds)
+{
+    if (!mpTimerExpireCallback)
+    {
+        TMR6 = 0;
+        mpTimerExpireCallback = pCallback;
+
+
+        T6PR = (milliseconds * 2) - 1;
+
+        TMR6IF = 0;
+        TMR6IE = 1;
+        TMR6ON = 1;
+    }
+}
+
+
+
+
 
 void system_tick_handler(void)
 {
 
-    if (mLedCounter == 0)
+    static uint8_t sIntervalControl = 0b00010000;
+
+
+
+
+    if (mLedCounter % sIntervalControl == 0)
     {
 
-        PORTB = 0x01;
+        PORTB = 1 << 3;
+
+        timer_once(turnOffAllLeds, 1);
+
+        if (sIntervalControl > 0b00001000)
+        {
+            sIntervalControl >>= 1;
+        }
+        else
+        {
+            sIntervalControl <<= 1;
+        }
+
     }
-    else
+    else if (mLedCounter % sIntervalControl == 1)
+    {
+        PORTB = 1 << 1;
+
+        timer_once(turnOffAllLeds, 1);
+    }
+    else if (mLedCounter % sIntervalControl == 2)
+    {
+        PORTB = 1 << 4;
+
+        timer_once(turnOffAllLeds, 1);
+    }
+    else if (mLedCounter % sIntervalControl == 3)
     {
 
-        PORTB = 0x00;
+        PORTB = 1 << 0;
+
+        timer_once(turnOffAllLeds, 1);
+    }
+    else if (mLedCounter % sIntervalControl == 4)
+    {
+
+        PORTA = 1 << 5;
+        timer_once(backdrivePulseOver, 1);
     }
 
     mLedCounter++;
-    mLedCounter &= 0x0F;
+
 
 
 
@@ -20266,9 +20376,16 @@ void system_tick_handler(void)
 
 void main(void)
 {
-    (INTCONbits.GIE = 0);
+
+
+    PORTC = 0b00000001;
+    TRISC = 0b11111110;
+    ANSELC = 0b11111110;
+
     setup();
     (INTCONbits.GIE = 1);
+# 268 "main.c"
+    T0EN = 1;
 
 
     while(1)
@@ -20278,7 +20395,16 @@ void main(void)
             mUnhandledSystemTick = 0;
 
 
+
+
+
+            BORCON = 0x80;
+
+
             system_tick_handler();
+
+
+            BORCON = 0x00;
 
             switchSystemClock(0);
         }
@@ -20303,6 +20429,19 @@ void __attribute__((picinterrupt(("")))) isr(void)
 
         TMR0IF = 0;
 
+    }
+
+
+    if (TMR6IE && TMR6IF)
+    {
+        TMR6IE = 0;
+
+        if (mpTimerExpireCallback)
+        {
+            mpTimerExpireCallback();
+            mpTimerExpireCallback = ((void*)0);
+            switchSystemClock(0);
+        }
     }
 
     return;
