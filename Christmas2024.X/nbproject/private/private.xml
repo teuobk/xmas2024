@@ -4,7 +4,17 @@
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
             <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/main.c</file>
-            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/common.h</file>
+            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/adc.h</file>
+            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/prefs.c</file>
+            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/leds.h</file>
+            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/rf.c</file>
+            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/disassembly/listing.disasm</file>
+            <file>file:/C:/Program%20Files/Microchip/MPLABX/v6.05/packs/Microchip/PIC16F1xxxx_DFP/1.15.191/xc8/pic/include/proc/pic16lf18854.h</file>
+            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/rf.h</file>
+            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/leds.c</file>
+            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/prefs.h</file>
+            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/global.h</file>
+            <file>file:/E:/ProgrammingToo/Experimentation/Christmas2024/Christmas2024.X/adc.c</file>
         </group>
     </open-files>
 </project-private>
