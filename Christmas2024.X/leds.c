@@ -13,6 +13,8 @@
 #define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   0x03
 #define LED_BLINK_LOW_THRESH_MV                 2400
 
+#define PORT_C_NON_LED_MASK  (0xFC)
+
 // Typedefs
 
 typedef enum
@@ -68,10 +70,12 @@ static void turnOffAllPortALeds(void)
     PORTA = 0;
 }
 
+
+
 // Turn off all port C LEDs. INTERRUPT CALLBACK USE ONLY.
 static void turnOffAllPortCLeds(void)
 {
-    PORTC = PORTC & 0xFC; // don't spoil the keep-on pin or supercap charging
+    PORTC = LATC & PORT_C_NON_LED_MASK; // don't spoil the non-LED pins on port C
 }
 
 
@@ -110,7 +114,8 @@ void LED_twinkle(void)
             }
             break;
         case LED_PORT_C:
-            PORTC = KEEP_ON_PIN | (uint8_t)(1 << currentStep.pin);
+            // Don't spoil the non-LED pins on port C
+            LATC = (LATC & PORT_C_NON_LED_MASK) | (uint8_t)(1 << currentStep.pin);
             TIMER_once(turnOffAllPortCLeds, blinkTime);
             break;
         case LED_IDLE:

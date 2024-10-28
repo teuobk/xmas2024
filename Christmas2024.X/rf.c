@@ -7,14 +7,22 @@
 
 // Macros and constants
 
-#define RF_BARKER_SEQ  (0x0000FFF3UL)
-#define RF_BARKER_MASK  (0x0000FFFFUL)
+//#define RF_BARKER_SEQ   (0x0000FFF3UL)
+//#define RF_BARKER_MASK  (0x0000FFFFUL)
+#define RF_BARKER_SEQ   (0x00003C3CULL)
+#define RF_BARKER_MASK  (0x00003FFCULL)
 #define RF_NET_PAYLOAD_LEN_INC_ECC (8) // for an 8,4 Hamming code
-#define RF_RAW_PAYLOAD_LEN_SAMPLES  (RF_NET_PAYLOAD_LEN_INC_ECC * 2) // for Manchester coding
-#define RF_FRAME_BARKER_MASK (uint32_t)(RF_BARKER_MASK << RF_RAW_PAYLOAD_LEN_SAMPLES)
-#define RF_FRAME_BARKER_SEQ  (uint32_t)(RF_BARKER_SEQ << RF_RAW_PAYLOAD_LEN_SAMPLES)
+#define RF_SAMPLES_PER_BIT  (4)
+#define RF_RAW_PAYLOAD_LEN_SAMPLES  (RF_NET_PAYLOAD_LEN_INC_ECC * RF_SAMPLES_PER_BIT) // for Manchester coding
+//#define RF_FRAME_BARKER_MASK (uint32_t)(RF_BARKER_MASK << RF_RAW_PAYLOAD_LEN_SAMPLES)
+//#define RF_FRAME_BARKER_SEQ  (uint32_t)(RF_BARKER_SEQ << RF_RAW_PAYLOAD_LEN_SAMPLES)
+#define RF_FRAME_BARKER_MASK (uint64_t)(RF_BARKER_MASK << RF_RAW_PAYLOAD_LEN_SAMPLES)
+#define RF_FRAME_BARKER_SEQ  (uint64_t)(RF_BARKER_SEQ << RF_RAW_PAYLOAD_LEN_SAMPLES)
 
 #define NUM_SAMPLES_TO_AVERAGE_FOR_SLICER   (8) // must be power of 2
+
+// Don't bother looking for RF traffic if the RF level isn't very high to begin with
+#define RF_LEVEL_MIN_FOR_COMMS_COUNTS       (64)
 
 // Typedefs
 
@@ -27,10 +35,10 @@ typedef enum
     CMD_PWR_HIGH,
     CMD_PWR_ULTRAHIGH,
 
-    CMD_SUPERCAP_CHRG_DIS,
+    CMD_SUPERCAP_CHRG_DIS = 5,
     CMD_SUPERCAP_CHRG_EN,
 
-    CMD_TREE_STAR_DIS,
+    CMD_TREE_STAR_DIS = 7,
     CMD_TREE_STAR_EN,
             
     // 0x0F is also reserved, to guard against an all-ones packet
@@ -44,7 +52,7 @@ static uint8_t mRfLevelSamples[NUM_SAMPLES_TO_AVERAGE_FOR_SLICER] = {0}; // in 8
 static uint8_t mRfLevelIndex = 0; 
 static uint8_t mRfLevelAverage = 0;
 static uint8_t mRfLevelPeak = 0;
-static uint32_t mBitCache = 0;
+static uint64_t mBitCache = 0;
     
 // Implementations
 
@@ -121,34 +129,35 @@ static bool rf_frame_decode(uint32_t frameBits)
     // Extract the individual bits from the encoded byte
     // Done with ANDs of shifted literals to avoid rotations, which
     // must be done iteratively (one place at a time) on this architecture
-    uint8_t p1 = !!(frameBits & (1 << 14)); 
-    uint8_t p2 = !!(frameBits & (1 << 12));
-    uint8_t d1 = !!(frameBits & (1 << 10));
-    uint8_t p3 = !!(frameBits & (1 << 8));
-    uint8_t d2 = !!(frameBits & (1 << 6));
-    uint8_t d3 = !!(frameBits & (1 << 4));
-    uint8_t d4 = !!(frameBits & (1 << 2));
-    uint8_t p4 = frameBits & 1;
+
+    uint8_t p1 = !!(frameBits & (1UL << (7*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2))); 
+    uint8_t p2 = !!(frameBits & (1UL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
+    uint8_t d1 = !!(frameBits & (1UL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
+    uint8_t p3 = !!(frameBits & (1UL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
+    uint8_t d2 = !!(frameBits & (1UL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
+    uint8_t d3 = !!(frameBits & (1UL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
+    uint8_t d4 = !!(frameBits & (1UL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
+    uint8_t p4 = !!(frameBits & (1UL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
 
     // Calculate the syndrome using parity checks
-    uint8_t s1 = p1 ^ d1 ^ d2 ^ d4;
-    uint8_t s2 = p2 ^ d1 ^ d3 ^ d4;
-    uint8_t s3 = p3 ^ d2 ^ d3 ^ d4;
-    uint8_t s4 = p4 ^ d1 ^ d2 ^ d3;
+    uint8_t s1 = p1 ^ d1 ^ d2 ^ d4;   // 2**0
+    uint8_t s2 = p2 ^ d1 ^ d3 ^ d4;   // 2**1
+    uint8_t s3 = p3 ^ d2 ^ d3 ^ d4;   // 2**2
+    uint8_t cc = p1 ^ p2 ^ p3 ^ p4 ^ d1 ^ d2 ^ d3 ^ d4;   // overall parity, for double-error detection
 
-    // Combine the syndrome bits into a single value
-    uint8_t syndrome = (uint8_t)((s1 << 3) | (s2 << 2) | (s3 << 1) | s4);
+    // Combine the syndrome bits into a single value. Only the syndrome bits are used.
+    uint8_t syndrome = (uint8_t)((s3 << 2) | (s2 << 1) | (s1 << 0));
 
     if (syndrome == 0) 
     {
-        // No errors, extract the data nibble
+        // No errors, or the error was in the overall parity bit only (if cc != 0),
+        // so extract the data nibble
         decodedFrame = (uint8_t)((d1 << 3) | (d2 << 2) | (d3 << 1) | d4);
         decodeSuccess = true;
     } 
-    else if (syndrome > 0 && syndrome <= 8) 
+    else if (cc == 1) // and syndrome != 0, of course
     {
-        // Single-bit error, correct it
-        // (and avoid a lot more bit ops, since we only care about fixing data bits)
+        // Single-bit error, so correctable
         if (syndrome == 3) // fix d1
         {
             d1 ^= 1;
@@ -165,14 +174,10 @@ static bool rf_frame_decode(uint32_t frameBits)
         {
             d4 ^= 1;
         }
-        
-//        frameBits ^= (1 << (16 - syndrome)); // Flip the erroneous bit
-//
-//        // Re-extract the corrected bits
-//        d1 = !!(frameBits & (1 << 10));
-//        d2 = !!(frameBits & (1 << 6));
-//        d3 = !!(frameBits & (1 << 4));
-//        d4 = !!(frameBits & (1 << 2));
+        else
+        {
+            // Error was in a parity bit, so ignore
+        }
 
         // Extract the corrected data nibble
         decodedFrame = (uint8_t)((d1 << 3) | (d2 << 2) | (d3 << 1) | d4);
@@ -180,7 +185,7 @@ static bool rf_frame_decode(uint32_t frameBits)
     } 
     else 
     {
-        // Uncorrectable error (more than 1 bit error)
+        // Uncorrectable error (two bits of error)
     }
     
     // If successful decode, handle the command
@@ -215,7 +220,7 @@ static uint8_t rf_read_comparator(void)
     // Turn on the comparator with the output inverted
     CM1CON0 = 0b10010000;
     
-    // Allow levels to settle (DAC in particular needs up to 10 us)
+    // Allow levels to settle (DAC in particular needs up to 10 us) (Testing has shown that it definitely doesn't work with 10 nops, but seems to at 20 nops)
     NOP();
     NOP();
     NOP();
@@ -226,6 +231,7 @@ static uint8_t rf_read_comparator(void)
     NOP();
     NOP();
     NOP();
+
     NOP();
     NOP();
     NOP();
@@ -236,27 +242,7 @@ static uint8_t rf_read_comparator(void)
     NOP();
     NOP();
     NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    
+
     // Read comparator value
     bitValue = MC1OUT;
     
@@ -273,26 +259,43 @@ static uint8_t rf_read_comparator(void)
 // if it looks like we might have a command
 void RF_sample_bit(void)
 { 
+    // Don't bother sampling if there doesn't seem to be any RF energy around
+    if (mRfLevelPeak < RF_LEVEL_MIN_FOR_COMMS_COUNTS)
+    {
+        return;
+    }
+    
     uint8_t newBit = 0;
     
     // Sample the RF level with the comparator
     newBit = rf_read_comparator();
     
+    // Debug output
+    LATC = (LATC & ~(1 << 6)) | (!newBit - 1);
+    
     // Push the new bit into the cache
-    mBitCache = (uint32_t)(mBitCache << 1) | newBit;
+    mBitCache = (uint64_t)(mBitCache << 1) | newBit;
     
     // Whenever the bit pattern shows a start sequence in a position consistent
     // with having received a full frame, attempt to decode the frame. 
     
     if ((mBitCache & RF_FRAME_BARKER_MASK) == RF_FRAME_BARKER_SEQ)
     {
-        if (rf_frame_decode(mBitCache))
+        if (rf_frame_decode((uint32_t)(mBitCache & UINT32_MAX)))
         {
             LED_blink_ack();
         }        
         else
         {
-            LED_blink_nack();
+            // Try once more, but shift the timing 50 ms
+            if (rf_frame_decode((uint32_t)(mBitCache & UINT32_MAX) << 1)) // TODO: how much shift, and in which direction?
+            {
+                LED_blink_ack();
+            }
+            else
+            {
+                LED_blink_nack();
+            }
         }
     }
 }

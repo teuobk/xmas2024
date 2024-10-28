@@ -5,8 +5,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define LED_BACKDRIVE_PIN_1 (uint8_t)(1 << 0) // on port C
+#define LED_BACKDRIVE_PIN_2 (uint8_t)(1 << 1) // on port C
 #define KEEP_ON_PIN         (uint8_t)(1 << 4) // on port C
 #define SUPERCAP_CHRG_PIN   (uint8_t)(1 << 5) // on port C
+#define DEBUG_PIN           (uint8_t)(1 << 6) // on port C
 
 #define TREE_STAR_PIN       (4) // on port B
 

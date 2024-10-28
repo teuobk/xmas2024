@@ -14,8 +14,8 @@
 // Macros and constants
 
 // For best performance, sample after a power of 2 ticks
-#define SAMPLE_VCC_EVERY_TICKS      (16)
-#define SAMPLE_VRF_EVERY_TICKS      (8)
+#define SAMPLE_VCC_EVERY_TICKS      (32)
+#define SAMPLE_VRF_EVERY_TICKS      (16)
 
 // Supercap charging action thresholds [mV]
 #define SUPERCAP_CHRG_THRESH_1      (2500)
@@ -65,12 +65,12 @@ void setup(void)
     PORTA = 0;
     
     // Input/output states (default = input)
-    TRISC = (uint8_t)~(KEEP_ON_PIN | 0b01 | 0b10 | SUPERCAP_CHRG_PIN);
+    TRISC = (uint8_t)~(KEEP_ON_PIN | LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2  | SUPERCAP_CHRG_PIN | DEBUG_PIN);
     TRISB = 0b11000000; // All port B outputs except programming pins
     TRISA = 0b00000001; // All outputs except RA0
     
     // Analog/digital
-    ANSELC = (uint8_t)~(KEEP_ON_PIN | 0b01 | 0b10 | SUPERCAP_CHRG_PIN); 
+    ANSELC = (uint8_t)~(KEEP_ON_PIN | LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2 | SUPERCAP_CHRG_PIN | DEBUG_PIN); 
     ANSELB = 0b11000000; // All port B digital except programming pins
     ANSELA = 0b00000001; // All digital except RA0
     
@@ -90,7 +90,7 @@ void setup(void)
     T0EN = 0; // Timer off for now
     TMR0IF = 0; // Clear interrupt flag
     TMR0IE = 1; // Enable interrupts
-    TMR0H = 96; // (tick count is this number + 1) interrupt every 100 ms
+    TMR0H = 48; // (tick count is this number + 1) interrupt every 50 ms
     
     // Initialize systick timer count to almost expired. We do this to force a system
     // tick just after startup because forcing a system tick by setting the 
@@ -250,7 +250,7 @@ void system_tick_handler(void)
 {
     static bool sChargingCap = false;
     
-    // Measure VDD with the ADC using the FVR once per second or on every tick 
+    // Measure VDD with the ADC using the FVR about once every other second or on every tick 
     // if we're charging the supercap (so as to avoid brownout), but not on the first time through
     if ((gTickCount > 0 && (gTickCount % SAMPLE_VCC_EVERY_TICKS == 0)) ||
         sChargingCap)
@@ -258,7 +258,7 @@ void system_tick_handler(void)
         gVcc = ADC_read_vcc();
     }
     
-    // Measure the RF level with the ADC about twice per second and add it to the running average to set the slicer
+    // Measure the RF level with the ADC about once per second and add it to the running average to set the slicer
     // and detect whether there's any RF available to harvest
     if (gTickCount > 0 && (gTickCount % SAMPLE_VCC_EVERY_TICKS == 0))
     {
@@ -269,8 +269,9 @@ void system_tick_handler(void)
     
     sChargingCap = supercap_charge();
 
-    // Twinkle the LEDs, but only if we don't already have a status LED showing
-    if (!mpTimerExpireCallback)
+    // Twinkle the LEDs, but only if we don't already have a status LED showing and only on every other tick (10 Hz)
+    if (!mpTimerExpireCallback &&
+            ((gTickCount & 0x0001) == 0))
     {
         LED_twinkle();
     }
