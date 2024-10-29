@@ -209,7 +209,8 @@ bool supercap_charge(void)
         !gPrefsCache.supercapChrgEn)
     {
         // Stop charging cap to avoid damage above 3300 mV (Note that due to
-        // the diode drop and ESR of the cap, we actually have some margin here)
+        // the diode drop and ESR of the cap, we actually have some margin here
+        // or stop charging because that's what the preferences say
         RC5 = 0;
         ANSELCbits.ANSC5 = 1;
         WPUC5 = 0;
@@ -318,7 +319,7 @@ void main(void)
     T0EN = 1;
     
     // Seed the random number generator with entropy
-    ADC_set_random_state(ADC_gen_entropy());
+    ADC_set_random_state(ADC_gen_entropy() ^ ADC_read_vcc_fast());
             
     // Loop forever
     while(true)

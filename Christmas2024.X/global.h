@@ -14,7 +14,10 @@
 #define TREE_STAR_PIN       (4) // on port B
 
 // Systicks per second
-#define TICKS_PER_SEC       (10)
+#define TICKS_PER_SEC       (20)
+
+#define MIN(a,b)        ((a < b) ? (a) : (b))
+#define MAX(a,b)        ((a > b) ? (a) : (b))
 
 typedef void (*func_t)(void);
 

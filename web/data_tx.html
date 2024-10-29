@@ -4,11 +4,28 @@
     <title>Data Transmission Tool</title>
 </head>
 <body>
-    <button id="startButton">Start</button>
-    <button id="stopButton" disabled>Stop</button>
+    <button id="startButton">Power On</button>
     <br><br>
     <input type="text" id="dataInput" value="0" maxlength="1" size="1">
     <button id="sendButton" disabled>Send</button>
+
+    <!-- New buttons for predefined values -->
+    <hr>
+    <h3>LED power</h3>
+    <button id="ultralowPowerButton" disabled>Ultralow Power</button>
+    <br>
+    <button id="normalPowerButton" disabled>Normal Power</button>
+    <br>
+    <button id="highPowerButton" disabled>High Power</button>
+    <br>
+    <button id="ultrahighPowerButton" disabled>Ultrahigh Power</button>
+    <br>
+    <hr>
+    <h3>Tree star</h3>
+    <button id="disableTreeStarButton" disabled>Disable Tree Star</button>
+    <br>
+    <button id="enableTreeStarButton" disabled>Enable Tree Star</button>
+    <hr>
 
     <script type="text/javascript">
         (function() {
@@ -19,34 +36,78 @@
 
             var isRunning = false;
             var isTransmittingData = false;
-            var startTime = 0;
-            var maxDuration = 30000; // 30 seconds
-            var socket = null;
             var carrierTimerId = null;
+            var activityTimeout = null; // Timeout that resets after activity
             var symbolIndex = 0;
             var symbols = [];
-            var previousPhase = 0; // 0 for normal phase, 1 for reversed phase
 
             startButton.addEventListener('click', function() {
-                startTransmission();
-            });
-
-            stopButton.addEventListener('click', function() {
-                stop();
+                if (isRunning) {
+                    stop();
+                } else {
+                    startTransmission();
+                }
             });
 
             sendButton.addEventListener('click', function() {
+                resetTimeout();
                 sendData();
             });
+
+            // New event listeners for predefined value buttons
+            var otherButtons = [];
+            otherButtons.push(document.getElementById('ultralowPowerButton'));
+            document.getElementById('ultralowPowerButton').addEventListener('click', function() {
+                resetTimeout();
+                setDataAndSend('1');
+            });
+            otherButtons.push(document.getElementById('normalPowerButton'));
+            document.getElementById('normalPowerButton').addEventListener('click', function() {
+                resetTimeout();
+                setDataAndSend('2');
+            });
+            otherButtons.push(document.getElementById('highPowerButton'));
+            document.getElementById('highPowerButton').addEventListener('click', function() {
+                resetTimeout();
+                setDataAndSend('3');
+            });
+            otherButtons.push(document.getElementById('ultrahighPowerButton'));
+            document.getElementById('ultrahighPowerButton').addEventListener('click', function() {
+                resetTimeout();
+                setDataAndSend('4');
+            });
+            otherButtons.push(document.getElementById('disableTreeStarButton'));
+            document.getElementById('disableTreeStarButton').addEventListener('click', function() {
+                resetTimeout();
+                setDataAndSend('7');
+            });
+            otherButtons.push(document.getElementById('enableTreeStarButton'));
+            document.getElementById('enableTreeStarButton').addEventListener('click', function() {
+                resetTimeout();
+                setDataAndSend('8');
+            });
+
+            function resetTimeout() {
+                // Clear any existing timeout and set a new 30-second timeout
+                if (activityTimeout !== null) {
+                    clearTimeout(activityTimeout);
+                }
+                activityTimeout = setTimeout(stop, 30000);
+            }
+
+            function setDataAndSend(value) {
+                dataInput.value = value;
+                sendData();
+            }
 
             function startTransmission() {
                 if (isRunning) return;
 
-                startButton.disabled = true;
-                stopButton.disabled = false;
-                sendButton.disabled = false;
                 isRunning = true;
-                startTime = Date.now();
+                startButton.textContent = "Power Off";
+                sendButton.disabled = false;
+                otherButtons.forEach(x => x.disabled = false);
+
 
                 // Connect to the secure WebSocket server
                 socket = new WebSocket('wss://keacher.com:8080');
@@ -59,11 +120,13 @@
                 socket.onerror = function(error) {
                     console.error('WebSocket error:', error);
                 };
-
                 socket.onclose = function() {
                     console.log('WebSocket connection closed.');
                     stop();
                 };
+
+                resetTimeout();
+                startCarrier();
             }
 
             function stop() {
@@ -71,25 +134,24 @@
 
                 isRunning = false;
                 isTransmittingData = false;
-                startButton.disabled = false;
-                stopButton.disabled = true;
+                startButton.textContent = "Power On";
                 sendButton.disabled = true;
+                otherButtons.forEach(x => x.disabled = true);
 
                 if (carrierTimerId !== null) {
                     clearTimeout(carrierTimerId);
                     carrierTimerId = null;
                 }
 
-                if (socket) {
-                    socket.close();
-                    socket = null;
+                if (activityTimeout !== null) {
+                    clearTimeout(activityTimeout);
+                    activityTimeout = null;
                 }
             }
 
             function startCarrier() {
                 if (!isRunning || isTransmittingData) return;
 
-                // Start sending carrier continuously
                 sendCarrierData();
             }
 
@@ -97,26 +159,24 @@
                 if (!isRunning || isTransmittingData) return;
 
                 if (socket && socket.readyState === WebSocket.OPEN && socket.bufferedAmount === 0) {
-                    // Send data
                     var size = 5 * 1024; // 5 KB
                     var data = generatePrintableData(size);
                     socket.send(data);
                 }
 
-                // Continue sending data as fast as possible
                 carrierTimerId = setTimeout(sendCarrierData, 0);
             }
 
             function sendData() {
                 if (!isRunning || isTransmittingData) return;
                 sendButton.disabled = true;
+                otherButtons.forEach(x => x.disabled = true);
                 var hexValue = dataInput.value.trim();
                 if (!/^[0-9A-Fa-f]$/.test(hexValue)) {
                     alert('Please enter a valid hexadecimal digit (0-9, A-F).');
                     return;
                 }
 
-                // Stop carrier transmission
                 if (carrierTimerId !== null) {
                     clearTimeout(carrierTimerId);
                     carrierTimerId = null;
@@ -124,25 +184,18 @@
 
                 isTransmittingData = true;
                 symbolIndex = 0;
-                
-                // Encode data
-                var nibble = parseInt(hexValue, 16) & 0xF; // 4 bits
-                var encodedData = hammingEncode(nibble); // 8 bits array
+
+                var nibble = parseInt(hexValue, 16) & 0xF;
+                var encodedData = hammingEncode(nibble);
 
                 console.log("Hamming[8,4] encoded %d: " + JSON.stringify(encodedData), nibble);
 
-                // Create preamble (length-2 Barker code)
-                // Barker code for length 2 is [+1, -1]
-	        // but make it longer to have 300 ms high low sections
-                var preamble = [0,1];
-                
-                // Create symbols array
-                // Map preamble to symbols
+                var preamble = [0, 1];
+
                 symbols = preamble.map(function(value) {
                     return value;
                 });
 
-                // Differential encoding for data bits
                 for (var i = 0; i < encodedData.length; i++) {
                     var bit = encodedData[i];
                     symbols.push(bit);
@@ -150,36 +203,7 @@
 
                 console.log("Phase symbols including 2-Barker prefix: " + JSON.stringify(symbols));
 
-                // Start transmitting symbols
                 transmitSymbol();
-            }
-
-            function transmitSymbol() {
-                if (!isRunning || !isTransmittingData) {
-                    // Resume carrier transmission
-                    isTransmittingData = false;
-                    startCarrier();
-                    return;
-                }
-
-                if (symbolIndex >= symbols.length) {
-                    // Data transmission complete
-                    isTransmittingData = false;
-                    sendButton.disabled = false;
-                    startCarrier();
-                    return;
-                }
-
-                var symbol = symbols[symbolIndex];
-                symbolIndex++;
-
-                var onDuration = 150;
-                var offDuration = 150;
-
-                var firstPeriodIsOn = (symbol === 0);
-
-                // Call transmitOnOff with durations and firstPeriodIsOn
-                transmitOnOff(onDuration, offDuration, firstPeriodIsOn, transmitSymbol);
             }
 
             function transmitOnOff(firstDuration, secondDuration, isFirstPeriodOn, callback) {
@@ -240,20 +264,45 @@
                 firstPeriod();
             }
 
+
+            function transmitSymbol() {
+                if (!isRunning || !isTransmittingData) {
+                    isTransmittingData = false;
+                    startCarrier();
+                    return;
+                }
+
+                if (symbolIndex >= symbols.length) {
+                    isTransmittingData = false;
+                    sendButton.disabled = false;
+                    otherButtons.forEach(x => x.disabled = false);
+                    startCarrier();
+                    return;
+                }
+
+                var symbol = symbols[symbolIndex];
+                symbolIndex++;
+
+                var onDuration = 150;
+                var offDuration = 150;
+
+                var firstPeriodIsOn = (symbol === 0);
+
+                transmitOnOff(onDuration, offDuration, firstPeriodIsOn, transmitSymbol);
+            }
+
             function hammingEncode(nibble) {
-                // [8,4] Extended Hamming code
-                // Positions: [p1, p2, d1, p3, d2, d3, d4, p4]
                 var d = [
-                    (nibble >> 3) & 1, // d1 (MSB)
-                    (nibble >> 2) & 1, // d2
-                    (nibble >> 1) & 1, // d3
-                    (nibble >> 0) & 1  // d4 (LSB)
+                    (nibble >> 3) & 1,
+                    (nibble >> 2) & 1,
+                    (nibble >> 1) & 1,
+                    (nibble >> 0) & 1
                 ];
 
                 var p1 = d[0] ^ d[1] ^ d[3];
                 var p2 = d[0] ^ d[2] ^ d[3];
                 var p3 = d[1] ^ d[2] ^ d[3];
-                var p4 = p1 ^ p2 ^ p3 ^ d[0] ^ d[1] ^ d[2] ^ d[3]; // Overall parity bit
+                var p4 = p1 ^ p2 ^ p3 ^ d[0] ^ d[1] ^ d[2] ^ d[3];
 
                 var encoded = [p1, p2, d[0], p3, d[1], d[2], d[3], p4];
                 return encoded;
@@ -263,13 +312,13 @@
                 var array = new Uint8Array(size);
                 window.crypto.getRandomValues(array);
                 for (var i = 0; i < array.length; i++) {
-                    array[i] = 32 + (array[i] % 95); // Map to ASCII 32-126
+                    array[i] = 32 + (array[i] % 95);
                 }
                 return arrayToString(array);
             }
 
             function arrayToString(array) {
-                var chunkSize = 0x8000; // 32KB chunks for performance
+                var chunkSize = 0x8000;
                 var chunks = [];
                 for (var i = 0; i < array.length; i += chunkSize) {
                     chunks.push(String.fromCharCode.apply(null, array.subarray(i, i + chunkSize)));

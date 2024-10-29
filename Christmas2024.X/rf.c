@@ -65,19 +65,19 @@ static bool rf_command_handler(uint8_t decodedWord)
             break;
         case CMD_PWR_NORM:
             // Time limit 1500 us, harvest LED blinks OK
-            prefsTemp.blinkTimeLimit = 3;
+            prefsTemp.blinkTimeLimit = 3; // MUST be a power of 2 minus 1
             prefsTemp.harvestBlinkEn = true;
             prefsTemp.harvestRailChargeEn = false;
             break;
         case CMD_PWR_HIGH:
             // Time limit 3000 us, harvest LED blinks OK, drive harvest high-side
-            prefsTemp.blinkTimeLimit = 6;
+            prefsTemp.blinkTimeLimit = 7; // MUST be a power of 2 minus 1
             prefsTemp.harvestBlinkEn = true;
             prefsTemp.harvestRailChargeEn = true;
             break;
         case CMD_PWR_ULTRAHIGH:
             // Time limit 5000 us, harvest LED blinks OK, blink every base system tick (20 Hz vs 10 Hz), drive harvest high-side
-            prefsTemp.blinkTimeLimit = 10;
+            prefsTemp.blinkTimeLimit = 15; // MUST be a power of 2 minus 1
             prefsTemp.harvestBlinkEn = true;
             prefsTemp.harvestRailChargeEn = true;
             break;

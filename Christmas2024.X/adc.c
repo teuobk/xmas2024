@@ -29,8 +29,9 @@ uint8_t ADC_gen_entropy(void)
     // Set source to temperature diodes
     ADPCH = 0b111101;
             
-    // Start conversion without waiting. We're just using this for entropy,
+    // Start conversion without waiting much. We're just using this for entropy,
     // not the actual temperature.
+    ADACQ = 254; // about 15 us
     ADGO = 1;
     
     // Wait for completion
@@ -42,8 +43,7 @@ uint8_t ADC_gen_entropy(void)
     // Disable temperature source
     TSEN = 0;
     
-    // Guarantee the entropy is non-zero, since the LFSR generator doesn't handle zero
-    return ADRESL | 1;
+    return ADRESL;
 }
 
 // Read Vcc in tens of mV
@@ -90,6 +90,43 @@ uint16_t ADC_read_vcc(void)
     return mv;
     // TODO: Return without blocking for the end of the conversion
 }
+
+// Read Vcc in counts, trying for maximum noise
+uint8_t ADC_read_vcc_fast(void)
+{
+    // Set ADC clock to Fosc (so that we get a noisy result and don't have to turn on another oscillator),
+    // results right-justified (we want the noisy bits), and turn the module on
+    ADCON0 = 0b10000100;
+    
+    // Set the measured channel to FVR and reference to Vdd
+    ADPCH = 0b111111;
+    ADREF = 0b00000000;
+    
+    // Set acquisition time to almost nothing
+    ADACQ = 1;
+    
+    // Turn on FVR at 1024 mV for the ADC and wait for it to stabilize
+    FVRCON = 0b10000001;
+    while (!FVRRDY);
+    
+    // Turn on ADC
+    ADON = 1;
+    
+    // Start conversion
+    ADGO = 1;
+    
+    // Wait for completion
+    while (ADGO);
+    
+    // Turn off ADC
+    ADON = 0;
+    
+    // Turn off FVR and buffer
+    FVRCON = 0b00000000;
+        
+    return ADRESL;
+}
+
 
 uint8_t ADC_read_rf(void)
 {

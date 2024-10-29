@@ -34,7 +34,7 @@ typedef struct
 static const led_blink_prog_step_t cLedTwinkle[LED_CYCLE_LENGTH] =
 {
     {LED_PORT_B, 1},
-    {LED_PORT_B, 4},
+    {LED_PORT_B, 4}, // tree star
     {LED_PORT_A, 2},
     {LED_PORT_A, 6},
     {LED_PORT_B, 0},
@@ -43,12 +43,12 @@ static const led_blink_prog_step_t cLedTwinkle[LED_CYCLE_LENGTH] =
     {LED_PORT_B, 5},
     {LED_PORT_B, 3},
     {LED_PORT_A, 5},
-    {LED_IDLE, 0},
+    {LED_PORT_B, 4}, // tree star
     {LED_PORT_B, 2},
     {LED_PORT_A, 7},
     {LED_PORT_C, 1},
     {LED_IDLE, 0}, // TODO: Have another state of "charge LED harvest rail"?
-    {LED_IDLE, 0},
+    {LED_PORT_B, 4}, // tree star
 };
 
 // Variables
@@ -85,17 +85,17 @@ void LED_twinkle(void)
          
     // Limit power at startup no matter what the preferences say
     uint8_t timeLimit = gPrefsCache.blinkTimeLimit;
-    timeLimit = (gTickCount < (2*TICKS_PER_SEC)) ? LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS : timeLimit;
+    timeLimit = (gTickCount < (2*TICKS_PER_SEC)) ? MIN(timeLimit, LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS) : timeLimit;
     
     // Also limit power if VCC is low
-    timeLimit = (gVcc < LED_BLINK_LOW_THRESH_MV) ? LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS : timeLimit;
+    timeLimit = (gVcc < LED_BLINK_LOW_THRESH_MV) ? MIN(timeLimit, LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS) : timeLimit;
     
     // Variable length blink times, also ensuring blinkTime is non-zero. Will
-    // produce binks between 500 us and 2 ms
+    // produce blinks between 500 us and 2 ms
     uint8_t blinkTime = (randomInt & timeLimit) + 1;
     
     led_blink_prog_step_t currentStep = cLedTwinkle[remainder];
-    
+        
     switch (currentStep.port)
     {
         case LED_PORT_A:
@@ -112,9 +112,13 @@ void LED_twinkle(void)
             }
             break;
         case LED_PORT_C:
-            // Don't spoil the non-LED pins on port C
-            LATC = (LATC & PORT_C_NON_LED_MASK) | (uint8_t)(1 << currentStep.pin);
-            TIMER_once(turnOffAllPortCLeds, blinkTime);
+            // Allow the harvest LEDs to be enabled or disabled
+            if (gPrefsCache.harvestBlinkEn)
+            {
+                // Don't spoil the non-LED pins on port C
+                LATC = (LATC & PORT_C_NON_LED_MASK) | (uint8_t)(1 << currentStep.pin);
+                TIMER_once(turnOffAllPortCLeds, blinkTime);
+            }
             break;
         case LED_IDLE:
             // If enabled, use idle periods to backcharge the LED harvest rail
