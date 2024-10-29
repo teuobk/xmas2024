@@ -7,17 +7,11 @@
 
 // Macros and constants
 
-//#define RF_BARKER_SEQ   (0x0000FFF3UL)
-//#define RF_BARKER_MASK  (0x0000FFFFUL)
-#define RF_BARKER_SEQ   (0x00003C3CULL)
-#define RF_BARKER_MASK  (0x00003FFCULL)
+#define RF_BARKER_SEQ     (0b1111111000000111UL << 16)  // 11001 raw
+//#define RF_BARKER_SEQ   (0b0000111111001100UL)  // 1110010 raw, with bits doubled 7-Barker
 #define RF_NET_PAYLOAD_LEN_INC_ECC (8) // for an 8,4 Hamming code
-#define RF_SAMPLES_PER_BIT  (4)
+#define RF_SAMPLES_PER_BIT  (6)
 #define RF_RAW_PAYLOAD_LEN_SAMPLES  (RF_NET_PAYLOAD_LEN_INC_ECC * RF_SAMPLES_PER_BIT) // for Manchester coding
-//#define RF_FRAME_BARKER_MASK (uint32_t)(RF_BARKER_MASK << RF_RAW_PAYLOAD_LEN_SAMPLES)
-//#define RF_FRAME_BARKER_SEQ  (uint32_t)(RF_BARKER_SEQ << RF_RAW_PAYLOAD_LEN_SAMPLES)
-#define RF_FRAME_BARKER_MASK (uint64_t)(RF_BARKER_MASK << RF_RAW_PAYLOAD_LEN_SAMPLES)
-#define RF_FRAME_BARKER_SEQ  (uint64_t)(RF_BARKER_SEQ << RF_RAW_PAYLOAD_LEN_SAMPLES)
 
 #define NUM_SAMPLES_TO_AVERAGE_FOR_SLICER   (8) // must be power of 2
 
@@ -120,7 +114,7 @@ static bool rf_command_handler(uint8_t decodedWord)
 
 // Decode the frame, including correcting up to 1 flipped bit, using
 // an [8,4] Hamming code
-static bool rf_frame_decode(uint32_t frameBits)
+static bool rf_frame_decode_hamming(uint64_t frameBits)
 {
     bool cmdSuccess = false;
     bool decodeSuccess = false;
@@ -129,15 +123,16 @@ static bool rf_frame_decode(uint32_t frameBits)
     // Extract the individual bits from the encoded byte
     // Done with ANDs of shifted literals to avoid rotations, which
     // must be done iteratively (one place at a time) on this architecture
-
-    uint8_t p1 = !!(frameBits & (1UL << (7*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2))); 
-    uint8_t p2 = !!(frameBits & (1UL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
-    uint8_t d1 = !!(frameBits & (1UL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
-    uint8_t p3 = !!(frameBits & (1UL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
-    uint8_t d2 = !!(frameBits & (1UL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
-    uint8_t d3 = !!(frameBits & (1UL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
-    uint8_t d4 = !!(frameBits & (1UL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
-    uint8_t p4 = !!(frameBits & (1UL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2)));
+#define RF_SAMPLES_BIT_OFFSET  1
+    
+    uint8_t p1 = !!(frameBits & (1ULL << (7*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p2 = !!(frameBits & (1ULL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d1 = !!(frameBits & (1ULL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p3 = !!(frameBits & (1ULL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d2 = !!(frameBits & (1ULL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d3 = !!(frameBits & (1ULL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d4 = !!(frameBits & (1ULL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p4 = !!(frameBits & (1ULL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
 
     // Calculate the syndrome using parity checks
     uint8_t s1 = p1 ^ d1 ^ d2 ^ d4;   // 2**0
@@ -220,28 +215,13 @@ static uint8_t rf_read_comparator(void)
     // Turn on the comparator with the output inverted
     CM1CON0 = 0b10010000;
     
-    // Allow levels to settle (DAC in particular needs up to 10 us) (Testing has shown that it definitely doesn't work with 10 nops, but seems to at 20 nops)
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
-    NOP();
+    // Allow levels to settle (DAC in particular needs up to 10 us) (Testing has 
+    // shown that it definitely doesn't work with 10 nops, but seems to work
+    // at 20 nops). Note that each loop is equivalent to about 10 instruction cycles
+    for (uint8_t i = 0; i < 2; i++)
+    {
+        NOP();
+    }
 
     // Read comparator value
     bitValue = MC1OUT;
@@ -254,6 +234,38 @@ static uint8_t rf_read_comparator(void)
     
     return bitValue;
 }
+
+typedef union 
+{
+    uint32_t    word;
+    uint8_t     bytes[4];
+} bytewise_32_t;
+
+// Compute the correlation between a and b, with 0s interpreted as -1s, using
+// the given number of bytes for the calculation (counted from the LSB)
+static int8_t rf_compute_correlation(uint32_t a, uint32_t b, uint8_t startByte, uint8_t endByte)
+{
+    int8_t corr = 0;
+    bytewise_32_t pA;
+    bytewise_32_t pB;
+    
+    pA.word = a;
+    pB.word = b;
+    
+    // Compare from LSB to MSB, since we're big-endian
+    for (uint8_t i = startByte; i <= endByte; i++)
+    {
+        uint8_t byte_a = pA.bytes[i];
+        uint8_t byte_b = pB.bytes[i];
+        
+        uint8_t difference = byte_a ^ byte_b;
+        uint8_t numDifferences = cSetBitsInByte[difference];
+        corr += (8 - numDifferences);
+    }
+    
+    return corr;
+}
+
 
 // Sample another bit from the RF data tap and kick off command handling
 // if it looks like we might have a command
@@ -278,25 +290,25 @@ void RF_sample_bit(void)
     
     // Whenever the bit pattern shows a start sequence in a position consistent
     // with having received a full frame, attempt to decode the frame. 
-    
-    if ((mBitCache & RF_FRAME_BARKER_MASK) == RF_FRAME_BARKER_SEQ)
+
+    // Compute the correlation with the Barker code indicating the start of the frame
+    int8_t barkerCorr = rf_compute_correlation(RF_BARKER_SEQ, (uint32_t)(mBitCache >> 32), 2, 3);
+
+#define BARKER_CORR_THRESH  (14) // TBD
+    if (barkerCorr > BARKER_CORR_THRESH)
     {
-        if (rf_frame_decode((uint32_t)(mBitCache & UINT32_MAX)))
+        if (rf_frame_decode_hamming(mBitCache))
         {
             LED_blink_ack();
         }        
         else
         {
-            // Try once more, but shift the timing 50 ms
-            if (rf_frame_decode((uint32_t)(mBitCache & UINT32_MAX) << 1)) // TODO: how much shift, and in which direction?
-            {
-                LED_blink_ack();
-            }
-            else
-            {
-                LED_blink_nack();
-            }
+            LED_blink_nack();
         }
+        
+        // Clear the cache to prevent duplicates, since some packets can look a bit like
+        // another Barker start sequence
+        mBitCache = 0;
     }
 }
 

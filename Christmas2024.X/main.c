@@ -249,18 +249,22 @@ bool supercap_charge(void)
 void system_tick_handler(void)
 {
     static bool sChargingCap = false;
-    
+        
     // Measure VDD with the ADC using the FVR about once every other second or on every tick 
-    // if we're charging the supercap (so as to avoid brownout), but not on the first time through
-    if ((gTickCount > 0 && (gTickCount % SAMPLE_VCC_EVERY_TICKS == 0)) ||
+    // if we're charging the supercap (so as to avoid brownout), but not just after startup
+    if ( (gTickCount > (1*TICKS_PER_SEC) && (gTickCount % SAMPLE_VCC_EVERY_TICKS) == 0) ||
         sChargingCap)
     {
         gVcc = ADC_read_vcc();
     }
     
+    // Make sampling of RF voltages more random
+    uint8_t moduloMatch = (0x0F & ADC_get_random_state());
+
     // Measure the RF level with the ADC about once per second and add it to the running average to set the slicer
-    // and detect whether there's any RF available to harvest
-    if (gTickCount > 0 && (gTickCount % SAMPLE_VCC_EVERY_TICKS == 0))
+    // and detect whether there's any RF available to harvest, but not just after startup
+    if (gTickCount > (1*TICKS_PER_SEC) && 
+        (gTickCount % SAMPLE_VRF_EVERY_TICKS) == moduloMatch)
     {
         RF_update_slicer_level();
     }
@@ -271,7 +275,7 @@ void system_tick_handler(void)
 
     // Twinkle the LEDs, but only if we don't already have a status LED showing and only on every other tick (10 Hz)
     if (!mpTimerExpireCallback &&
-            ((gTickCount & 0x0001) == 0))
+            ((gTickCount & 1) == 0))
     {
         LED_twinkle();
     }

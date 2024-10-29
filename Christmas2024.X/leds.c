@@ -70,12 +70,10 @@ static void turnOffAllPortALeds(void)
     PORTA = 0;
 }
 
-
-
 // Turn off all port C LEDs. INTERRUPT CALLBACK USE ONLY.
 static void turnOffAllPortCLeds(void)
 {
-    PORTC = LATC & PORT_C_NON_LED_MASK; // don't spoil the non-LED pins on port C
+    LATC = LATC & PORT_C_NON_LED_MASK; // don't spoil the non-LED pins on port C
 }
 
 

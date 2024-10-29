@@ -139,3 +139,9 @@ void ADC_set_random_state(uint8_t state)
     // Ensure it's non-zero
     mRandomState = state | 1;
 }
+
+// Return the most recent random number
+uint8_t ADC_get_random_state(void)
+{
+    return mRandomState;
+}
