@@ -133,6 +133,7 @@
 
                 // Create preamble (length-2 Barker code)
                 // Barker code for length 2 is [+1, -1]
+	        // but make it longer to have 300 ms high low sections
                 var preamble = [0,1];
                 
                 // Create symbols array
@@ -172,8 +173,8 @@
                 var symbol = symbols[symbolIndex];
                 symbolIndex++;
 
-                var onDuration = 100;
-                var offDuration = 100;
+                var onDuration = 150;
+                var offDuration = 150;
 
                 var firstPeriodIsOn = (symbol === 0);
 
