@@ -12,9 +12,9 @@
 #define HARVEST_STOKE_PIN       (3)
 
 #define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   0x03
-#define LED_BLINK_LOW_THRESH_MV                 2400
+#define LED_BLINK_LOW_THRESH_MV                 2400 // When the voltage is below this level, the situation is considered "low power" so the low time limit applies no matter the power mode
 
-#define LED_HARVEST_STOKER_THRESH_MV            2400
+#define LED_HARVEST_STOKER_THRESH_MV            2350 // Should be above the voltage at which the system will be powerd on LEDs alone
 #define LED_HARVEST_STOKER_TIME_MS              (20)
 
 #define PORT_C_NON_LED_MASK  (0xFC)

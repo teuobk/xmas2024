@@ -7,7 +7,7 @@
 
 // Macros and constants
 
-#define RF_BARKER_SEQ     (0b1111111000000111UL << 16)  // 11001 raw
+#define RF_BARKER_SEQ     (0b1111111000000111UL)  // 11001 raw
 //#define RF_BARKER_SEQ   (0b0000111111001100UL)  // 1110010 raw, with bits doubled 7-Barker
 #define RF_NET_PAYLOAD_LEN_INC_ECC (8) // for an 8,4 Hamming code
 #define RF_SAMPLES_PER_BIT  (6)
@@ -35,6 +35,9 @@ typedef enum
     CMD_TREE_STAR_DIS = 7,
     CMD_TREE_STAR_EN,
             
+    CMD_UNLOCK = 9,
+    CMD_SELF_TEST = 10,
+            
     // 0x0F is also reserved, to guard against an all-ones packet
 
 } rf_cmd_id_t;
@@ -48,6 +51,8 @@ static uint8_t mRfLevelAverage = 0;
 static uint8_t mRfLevelPeak = 0;
 static uint64_t mBitCache = 0;
     
+static bool mCommandUnlocked = false;
+
 // Implementations
 
 static bool rf_command_handler(uint8_t decodedWord)
@@ -82,12 +87,26 @@ static bool rf_command_handler(uint8_t decodedWord)
             prefsTemp.harvestRailChargeEn = true;
             break;
         case CMD_SUPERCAP_CHRG_DIS:
-            // Disable charging of the supercap
-            prefsTemp.supercapChrgEn = false;
+            if (mCommandUnlocked)
+            {
+                // Disable charging of the supercap
+                prefsTemp.supercapChrgEn = false;
+            }
+            else
+            {
+                commandSuccess = false;
+            }
             break;
         case CMD_SUPERCAP_CHRG_EN:
-            // Enable charging of the supercap
-            prefsTemp.supercapChrgEn = true;
+            if (mCommandUnlocked)
+            {
+                // Enable charging of the supercap
+                prefsTemp.supercapChrgEn = true;
+            }
+            else
+            {
+                commandSuccess = false;
+            }
             break;
         case CMD_TREE_STAR_DIS:
             // Disable the tree star
@@ -97,11 +116,22 @@ static bool rf_command_handler(uint8_t decodedWord)
             // Enable the tree star
             prefsTemp.treeStarEn = true;
             break;
+        case CMD_UNLOCK:
+            // Enable special/restricted command on the next received frame only
+            mCommandUnlocked = true;
+            commandSuccess = false; // don't reveal it was a valid command
+            break;
+        case CMD_SELF_TEST:
+            // Start a self-test
+            // TODO
+            break;            
         default:
             commandSuccess = false;
             break;
     }
         
+    mCommandUnlocked = false;
+    
     // Build multi-byte command
     
     if (commandSuccess)
@@ -237,17 +267,17 @@ static uint8_t rf_read_comparator(void)
 
 typedef union 
 {
-    uint32_t    word;
-    uint8_t     bytes[4];
-} bytewise_32_t;
+    uint16_t    word;
+    uint8_t     bytes[sizeof(uint16_t)];
+} bytewise_16_t;
 
 // Compute the correlation between a and b, with 0s interpreted as -1s, using
 // the given number of bytes for the calculation (counted from the LSB)
-static int8_t rf_compute_correlation(uint32_t a, uint32_t b, uint8_t startByte, uint8_t endByte)
+static int8_t rf_compute_correlation(uint16_t a, uint16_t b, uint8_t startByte, uint8_t endByte)
 {
     int8_t corr = 0;
-    bytewise_32_t pA;
-    bytewise_32_t pB;
+    bytewise_16_t pA;
+    bytewise_16_t pB;
     
     pA.word = a;
     pB.word = b;
@@ -283,7 +313,7 @@ void RF_sample_bit(void)
     newBit = rf_read_comparator();
     
     // Debug output
-    LATC = (LATC & ~(1 << 6)) | (!newBit - 1);
+//    LATC = (LATC & ~(1 << 6)) | (!newBit - 1);
     
     // Push the new bit into the cache
     mBitCache = (uint64_t)(mBitCache << 1) | newBit;
@@ -292,9 +322,9 @@ void RF_sample_bit(void)
     // with having received a full frame, attempt to decode the frame. 
 
     // Compute the correlation with the Barker code indicating the start of the frame
-    int8_t barkerCorr = rf_compute_correlation(RF_BARKER_SEQ, (uint32_t)(mBitCache >> 32), 2, 3);
+    int8_t barkerCorr = rf_compute_correlation((uint16_t)RF_BARKER_SEQ, (uint16_t)(mBitCache >> 48), 0, 1);
 
-#define BARKER_CORR_THRESH  (14) // TBD
+#define BARKER_CORR_THRESH  (13) // TBD
     if (barkerCorr > BARKER_CORR_THRESH)
     {
         if (rf_frame_decode_hamming(mBitCache))

@@ -18,10 +18,9 @@
 #define SAMPLE_VRF_EVERY_TICKS      (16)
 
 // Supercap charging action thresholds [mV]
-#define SUPERCAP_CHRG_THRESH_1      (2500)
-#define SUPERCAP_CHRG_THRESH_2      (2800)
-#define SUPERCAP_CHRG_THRESH_3      (2950)
-#define SUPERCAP_CHRG_THRESH_4      (3300)
+#define SUPERCAP_CHRG_THRESH_SLOW      (2500)
+#define SUPERCAP_CHRG_THRESH_FAST      (2700)
+#define SUPERCAP_CHRG_THRESH_PROTECT   (3350)
 
 // Increments above which high-latency timers will be used
 #define HIGH_LATENCY_TIMER_THRESH   (32)
@@ -158,7 +157,8 @@ void switchSystemClock(bool fast)
     }
     else
     {
-        // Keep clock running faster if we have a pending high-resolution timer expiration
+        // Keep clock running faster if we have a pending high-resolution timer expiration, unless
+        // that high-res timer's callback is particularly long way into the future
         if (mpTimerExpireCallback && 
             T6PR < HIGH_LATENCY_TIMER_THRESH)
         {
@@ -212,7 +212,7 @@ bool supercap_charge(void)
     bool chargingCap = false;
     
     // Charge the supercap?
-    if (gVcc > SUPERCAP_CHRG_THRESH_4 ||
+    if (gVcc > SUPERCAP_CHRG_THRESH_PROTECT ||
         !gPrefsCache.supercapChrgEn)
     {
         // Stop charging cap to avoid damage above 3300 mV (Note that due to
@@ -222,23 +222,16 @@ bool supercap_charge(void)
         ANSELCbits.ANSC5 = 1;
         WPUC5 = 0;
     }
-    else if (gVcc > SUPERCAP_CHRG_THRESH_3)
+    else if (gVcc > SUPERCAP_CHRG_THRESH_FAST)
     {
         // Fast-charge cap (GPIO)
-        RC5 = 1;
+        LATC = LATC | (1 << 5); // RC5 = 1; // use LATC in case the starting level is low
         ANSELCbits.ANSC5 = 0;
         chargingCap = true;
     }
-    else if (gVcc > SUPERCAP_CHRG_THRESH_2)
+    else if (gVcc > SUPERCAP_CHRG_THRESH_SLOW)
     {
         // Slow-charge cap (weak pull-up)
-        ANSELCbits.ANSC5 = 1;
-        WPUC5 = 1;
-        chargingCap = true;
-    }
-    else if (gVcc > SUPERCAP_CHRG_THRESH_1)
-    {
-        // Also slow-charge cap
         ANSELCbits.ANSC5 = 1;
         WPUC5 = 1;
         chargingCap = true;
@@ -322,11 +315,11 @@ void main(void)
     // Cache load
     PREFS_init();
     
-    // Enable systick
-    T0EN = 1;
-    
     // Seed the random number generator with entropy
     ADC_set_random_state(ADC_gen_entropy() ^ ADC_read_vcc_fast());
+    
+    // Enable systick
+    T0EN = 1;
             
     // Loop forever
     while(true)
@@ -384,6 +377,7 @@ void __interrupt() isr(void)
         {
             mpTimerExpireCallback();
             mpTimerExpireCallback = NULL;        
+            TMR6ON = false;
             switchSystemClock(false);
         }
     }
