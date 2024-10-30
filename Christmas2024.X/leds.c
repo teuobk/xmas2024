@@ -9,9 +9,13 @@
 #define RF_ACK_LED_PIN          (3)
 #define RF_NACK_LED_PIN         (1)
 #define RF_ACK_BLINK_DURATION   (5)
+#define HARVEST_STOKE_PIN       (3)
 
 #define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   0x03
 #define LED_BLINK_LOW_THRESH_MV                 2400
+
+#define LED_HARVEST_STOKER_THRESH_MV            2400
+#define LED_HARVEST_STOKER_TIME_MS              (20)
 
 #define PORT_C_NON_LED_MASK  (0xFC)
 
@@ -47,7 +51,7 @@ static const led_blink_prog_step_t cLedTwinkle[LED_CYCLE_LENGTH] =
     {LED_PORT_B, 2},
     {LED_PORT_A, 7},
     {LED_PORT_C, 1},
-    {LED_IDLE, 0}, // TODO: Have another state of "charge LED harvest rail"?
+    {LED_PORT_C, 3}, // "stoke" the harvest LED rail
     {LED_PORT_B, 4}, // tree star
 };
 
@@ -74,6 +78,13 @@ static void turnOffAllPortALeds(void)
 static void turnOffAllPortCLeds(void)
 {
     LATC = LATC & PORT_C_NON_LED_MASK; // don't spoil the non-LED pins on port C
+}
+
+// Turn off the "soft" harvest LED stoker
+static void turnOffHarvestStoker(void)
+{
+    ANSELCbits.ANSC3 = 1;
+    WPUC3 = 0;                
 }
 
 
@@ -113,7 +124,17 @@ void LED_twinkle(void)
             break;
         case LED_PORT_C:
             // Allow the harvest LEDs to be enabled or disabled
-            if (gPrefsCache.harvestBlinkEn)
+            if (currentStep.pin == HARVEST_STOKE_PIN && gPrefsCache.harvestRailChargeEn)
+            {
+                if (gVcc >= LED_HARVEST_STOKER_THRESH_MV)
+                {
+                    // "Stoke" with a weak pullup
+                    ANSELCbits.ANSC3 = 1;
+                    WPUC3 = 1;
+                    TIMER_once(turnOffHarvestStoker, LED_HARVEST_STOKER_TIME_MS << 1);
+                }
+            }
+            else if (gPrefsCache.harvestBlinkEn)
             {
                 // Don't spoil the non-LED pins on port C
                 LATC = (LATC & PORT_C_NON_LED_MASK) | (uint8_t)(1 << currentStep.pin);

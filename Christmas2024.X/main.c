@@ -23,6 +23,9 @@
 #define SUPERCAP_CHRG_THRESH_3      (2950)
 #define SUPERCAP_CHRG_THRESH_4      (3300)
 
+// Increments above which high-latency timers will be used
+#define HIGH_LATENCY_TIMER_THRESH   (32)
+
 // Typedefs 
 
 typedef enum
@@ -156,7 +159,8 @@ void switchSystemClock(bool fast)
     else
     {
         // Keep clock running faster if we have a pending high-resolution timer expiration
-        if (mpTimerExpireCallback)
+        if (mpTimerExpireCallback && 
+            T6PR < HIGH_LATENCY_TIMER_THRESH)
         {
             mSystemClock = CLK_MED;
             
@@ -180,6 +184,9 @@ void switchSystemClock(bool fast)
 // Set up a timer to call the callback in the specified time
 // Does no bounds checking. Increments are half milliseconds (i.e., to 
 // have a 1 ms timeout, pass a value of 2)
+// If the delay is longer than 16 ms, the timeout will be serviced with the
+// sysclock set to the LTFINTOSC, so latency will be high (but power consumption
+// will be low)
 void TIMER_once(func_t pCallback, uint8_t halfMilliseconds)
 {
     // Start a new timer only if we don't already have one pending
