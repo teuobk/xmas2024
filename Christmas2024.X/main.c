@@ -19,8 +19,9 @@
 
 // Supercap charging action thresholds [mV]
 #define SUPERCAP_CHRG_THRESH_SLOW      (2500)
-#define SUPERCAP_CHRG_THRESH_FAST      (2700)
-#define SUPERCAP_CHRG_THRESH_PROTECT   (3350)
+#define SUPERCAP_CHRG_THRESH_FAST      (2900)
+#define SUPERCAP_CHRG_THRESH_LIMITTER  (3400) // 3300 mV plus worst-case Schottky drop (at 10 uA on a hot day) of 200 mV, plus a little margin
+#define SUPERCAP_CHRG_THRESH_PROTECT   (3600) // 3300 mV plus typical Schottky drop of 300 mV at 100 uA for these packages
 
 // Increments above which high-latency timers will be used
 #define HIGH_LATENCY_TIMER_THRESH   (32)
@@ -215,12 +216,19 @@ bool supercap_charge(void)
     if (gVcc > SUPERCAP_CHRG_THRESH_PROTECT ||
         !gPrefsCache.supercapChrgEn)
     {
-        // Stop charging cap to avoid damage above 3300 mV (Note that due to
-        // the diode drop and ESR of the cap, we actually have some margin here
-        // or stop charging because that's what the preferences say
+        // Voltage is too high to safely charge the cap, or charging is disabled
         RC5 = 0;
         ANSELCbits.ANSC5 = 1;
         WPUC5 = 0;
+    }
+    else if (gVcc > SUPERCAP_CHRG_THRESH_LIMITTER)
+    {
+        // Go back to slow charging as we're approaching the limit, and we want
+        // to take advantage of the diode drop and the current limit for
+        // the weak pull-up (which will be pretty low anyway at this point))
+        ANSELCbits.ANSC5 = 1;
+        WPUC5 = 1;
+        chargingCap = true;
     }
     else if (gVcc > SUPERCAP_CHRG_THRESH_FAST)
     {
