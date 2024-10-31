@@ -153,7 +153,7 @@ static bool rf_frame_decode_hamming(uint64_t frameBits)
     // Extract the individual bits from the encoded byte
     // Done with ANDs of shifted literals to avoid rotations, which
     // must be done iteratively (one place at a time) on this architecture
-#define RF_SAMPLES_BIT_OFFSET  1
+#define RF_SAMPLES_BIT_OFFSET  0
     
     uint8_t p1 = !!(frameBits & (1ULL << (7*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
     uint8_t p2 = !!(frameBits & (1ULL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
@@ -324,7 +324,7 @@ void RF_sample_bit(void)
     // Compute the correlation with the Barker code indicating the start of the frame
     int8_t barkerCorr = rf_compute_correlation((uint16_t)RF_BARKER_SEQ, (uint16_t)(mBitCache >> 48), 0, 1);
 
-#define BARKER_CORR_THRESH  (13) // TBD
+#define BARKER_CORR_THRESH  (14) // TBD
     if (barkerCorr > BARKER_CORR_THRESH)
     {
         if (rf_frame_decode_hamming(mBitCache))
