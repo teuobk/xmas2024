@@ -14,7 +14,7 @@
 #define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   0x03
 #define LED_BLINK_LOW_THRESH_MV                 2400 // When the voltage is below this level, the situation is considered "low power" so the low time limit applies no matter the power mode
 
-#define LED_HARVEST_STOKER_THRESH_MV            2350 // Should be above the voltage at which the system will be powerd on LEDs alone
+#define LED_HARVEST_STOKER_THRESH_MV            2300 // Should be above the voltage at which the system will be powerd on LEDs alone
 #define LED_HARVEST_STOKER_TIME_MS              (20)
 
 #define PORT_C_NON_LED_MASK  (0xFC)
@@ -83,7 +83,6 @@ static void turnOffAllPortCLeds(void)
 // Turn off the "soft" harvest LED stoker
 static void turnOffHarvestStoker(void)
 {
-    ANSELCbits.ANSC3 = 1;
     WPUC3 = 0;                
 }
 
@@ -129,7 +128,6 @@ void LED_twinkle(void)
                 if (gVcc >= LED_HARVEST_STOKER_THRESH_MV)
                 {
                     // "Stoke" with a weak pullup
-                    ANSELCbits.ANSC3 = 1;
                     WPUC3 = 1;
                     TIMER_once(turnOffHarvestStoker, LED_HARVEST_STOKER_TIME_MS << 1);
                 }

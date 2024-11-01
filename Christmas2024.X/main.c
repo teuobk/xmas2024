@@ -19,8 +19,9 @@
 
 // Supercap charging action thresholds [mV]
 #define SUPERCAP_CHRG_THRESH_SLOW      (2500)
-#define SUPERCAP_CHRG_THRESH_FAST      (2900)
-#define SUPERCAP_CHRG_THRESH_LIMITTER  (3400) // 3300 mV plus worst-case Schottky drop (at 10 uA on a hot day) of 200 mV, plus a little margin
+#define SUPERCAP_CHRG_THRESH_MEDIUM    (2700)
+#define SUPERCAP_CHRG_THRESH_FAST      (3000)
+#define SUPERCAP_CHRG_THRESH_LIMITTER  (3450) // 3300 mV plus worst-case Schottky drop (at 10 uA on a hot day) of 200 mV, plus a little margin
 #define SUPERCAP_CHRG_THRESH_PROTECT   (3600) // 3300 mV plus typical Schottky drop of 300 mV at 100 uA for these packages
 
 // Increments above which high-latency timers will be used
@@ -67,13 +68,14 @@ void setup(void)
     PORTB = 0;
     PORTA = 0;
     
-    // Input/output states (default = input)
-    TRISC = (uint8_t)~(KEEP_ON_PIN | LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2  | SUPERCAP_CHRG_PIN | DEBUG_PIN);
+    // Digital output driver connection (default = 1 = push-pull driver disconnected)
+    TRISC = /* Push-pull outputs */ (uint8_t)~(KEEP_ON_PIN | LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2 | DEBUG_PIN) |
+            /* Inputs or Weak pull-up output*/ (uint8_t)(SUPERCAP_CHRG_PIN | SUPERCAP_MED_CHRG_PIN | LED_STOKER_PIN);
     TRISB = 0b11000000; // All port B outputs except programming pins
     TRISA = 0b00000001; // All outputs except RA0
     
-    // Analog/digital
-    ANSELC = (uint8_t)~(KEEP_ON_PIN | LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2 | SUPERCAP_CHRG_PIN | DEBUG_PIN); 
+    // Analog vs Digital input selection (Important: affects only the input! Can still drive analog pins digitally if TRISCn=0)
+    ANSELC = (uint8_t)~(KEEP_ON_PIN | DEBUG_PIN); 
     ANSELB = 0b11000000; // All port B digital except programming pins
     ANSELA = 0b00000001; // All digital except RA0
     
@@ -212,13 +214,18 @@ bool supercap_charge(void)
 {
     bool chargingCap = false;
     
+    // Note how we're controlling only the TRIS connections for the relevant pins,
+    // as ANSEL affects only the input buffer (and thus we want to leave them 
+    // on "analog" especially if the net levels due to loading are in between digital ones)
+    
     // Charge the supercap?
     if (gVcc > SUPERCAP_CHRG_THRESH_PROTECT ||
         !gPrefsCache.supercapChrgEn)
     {
         // Voltage is too high to safely charge the cap, or charging is disabled
-        RC5 = 0;
-        ANSELCbits.ANSC5 = 1;
+        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN));
+        TRISCbits.TRISC5 = 1;
+        TRISCbits.TRISC7 = 1;
         WPUC5 = 0;
     }
     else if (gVcc > SUPERCAP_CHRG_THRESH_LIMITTER)
@@ -226,29 +233,45 @@ bool supercap_charge(void)
         // Go back to slow charging as we're approaching the limit, and we want
         // to take advantage of the diode drop and the current limit for
         // the weak pull-up (which will be pretty low anyway at this point))
-        ANSELCbits.ANSC5 = 1;
+        TRISCbits.TRISC5 = 1;
+        TRISCbits.TRISC7 = 1;
+        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN));
         WPUC5 = 1;
         chargingCap = true;
     }
     else if (gVcc > SUPERCAP_CHRG_THRESH_FAST)
     {
         // Fast-charge cap (GPIO)
-        LATC = LATC | (1 << 5); // RC5 = 1; // use LATC in case the starting level is low
-        ANSELCbits.ANSC5 = 0;
+        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN)) | SUPERCAP_CHRG_PIN; // RC5 = 1; // use LATC in case the starting level is low
+        TRISCbits.TRISC5 = 0;
+        TRISCbits.TRISC7 = 1;
+        WPUC5 = 0;
+        chargingCap = true;
+    }
+    else if (gVcc > SUPERCAP_CHRG_THRESH_MEDIUM)
+    {
+        // Medium-charge cap (GPIO) (through the 3.3k resistor)
+        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN)) | SUPERCAP_MED_CHRG_PIN; // RC7 = 1; // use LATC in case the starting level is low
+        TRISCbits.TRISC5 = 1;
+        TRISCbits.TRISC7 = 0;
+        WPUC5 = 0;
         chargingCap = true;
     }
     else if (gVcc > SUPERCAP_CHRG_THRESH_SLOW)
     {
         // Slow-charge cap (weak pull-up)
-        ANSELCbits.ANSC5 = 1;
+        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN));
+        TRISCbits.TRISC5 = 1;
+        TRISCbits.TRISC7 = 1;
         WPUC5 = 1;
         chargingCap = true;
     }
     else
     {
         // Stop charging cap (if we're doing so)
-        RC5 = 0;
-        ANSELCbits.ANSC5 = 1;
+        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN));
+        TRISCbits.TRISC5 = 1;
+        TRISCbits.TRISC7 = 1;
         WPUC5 = 0;
     }   
         
