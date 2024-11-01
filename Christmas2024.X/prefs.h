@@ -12,7 +12,10 @@ typedef struct
     bool        harvestBlinkEn;
     
     uint8_t     magicNumber; // to detect uninitialized prefs
+    uint8_t     crc; // protects all of the preferences
 } prefs_t;
+
+
 
 extern prefs_t gPrefsCache;
 
