@@ -338,7 +338,7 @@ void RF_sample_bit(void)
     newBit = rf_read_comparator();
     
     // Debug output
-//    LATC = (LATC & ~(1 << 6)) | (!newBit - 1);
+    
     
     // Push the new bit into the cache
     mBitCache = (uint64_t)(mBitCache << 1) | newBit;

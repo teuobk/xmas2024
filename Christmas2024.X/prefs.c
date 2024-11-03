@@ -144,6 +144,8 @@ void PREFS_update(prefs_t* pProposedSettings)
     }
 }
 
+// Read the preferences out of EEPROM, and initialize if needed
+// Takes about 115 us when Fosc=16MHz, so long as no write is needed
 void PREFS_init(void)
 {
     prefs_load();

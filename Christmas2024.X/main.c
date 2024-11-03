@@ -20,6 +20,10 @@
 // Increments above which high-latency timers will be used
 #define HIGH_LATENCY_TIMER_THRESH   (16 << 2) // multiplied by four due to the timer taking quarter-ms increments
 
+// Make sampling of RF voltages more random
+#define RF_SAMPLING_MASK    (0x0F)
+#define WHITENING           (0x5A)
+
 // Typedefs 
 
 
@@ -36,7 +40,9 @@ typedef enum
 // Goes true when Timer 0 has expired
 static bool mUnhandledSystemTick = false;
 
-static clock_speed_t mSystemClock = CLK_SLOW;
+// During bootup, we manually set the clock to 16 MHz, so set the internal state
+// accordingly
+static clock_speed_t mSystemClock = CLK_FAST;
 
 static func_t mpTimerExpireCallback = NULL;
 
@@ -62,16 +68,17 @@ void setup(void)
     PORTB = 0;
     PORTA = 0;
     
-    // Digital output driver connection (default = 1 = push-pull driver disconnected)
+    // Digital *OUTPUT* driver connection (default = 1 = push-pull driver disconnected)
     TRISC = /* Push-pull outputs */ (uint8_t)~(KEEP_ON_PIN | LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2 | DEBUG_PIN) |
             /* Inputs or Weak pull-up output*/ (uint8_t)(SUPERCAP_MONITOR_PIN | SUPERCAP_MED_CHRG_PIN | LED_STOKER_PIN);
     TRISB = 0b11000000; // All port B outputs except programming pins
     TRISA = 0b00000001; // All outputs except RA0
     
-    // Analog vs Digital input selection (Important: affects only the input! Can still drive analog pins digitally if TRISCn=0)
-    ANSELC = (uint8_t)~(KEEP_ON_PIN | DEBUG_PIN); 
-    ANSELB = 0b11000000; // All port B digital except programming pins
-    ANSELA = 0b00000001; // All digital except RA0
+    // Analog vs Digital *INPUT* selection (Important: affects only the input! Can still drive analog pins digitally if TRISCn=0)
+    // We don't use any digital inputs in this project, so leave them all as analog
+    ANSELC = 0xFF;
+    ANSELB = 0xFF; // All port B digital except programming pins
+    ANSELA = 0xFF; // All digital except RA0
     
     // Slew rate
     SLRCONC = 0xFF; // limit all PORTC
@@ -89,13 +96,8 @@ void setup(void)
     T0EN = 0; // Timer off for now
     TMR0IF = 0; // Clear interrupt flag
     TMR0IE = 1; // Enable interrupts
-    TMR0H = 48; // (tick count is this number + 1) interrupt every 50 ms
-    
-    // Initialize systick timer count to almost expired. We do this to force a system
-    // tick just after startup because forcing a system tick by setting the 
-    // unhandled-tick flag "true" directly leaves some sort of high-power thing 
-    // running until the first systick interrupt
-    TMR0L = TMR0H - 1; 
+    TMR0H = 48; // (tick count is this number + 1) interrupt every 50 ms    
+    TMR0L = 0;
     
     // Timer6 -- Programmable callback
     T6CLKCON = 0x04; // LFINTOSC (31 kHz))
@@ -220,9 +222,9 @@ void system_tick_handler(void)
             gVcc = ADC_read_vcc();
         }
         
-        // Make sampling of RF voltages more random
-#define RF_SAMPLING_MASK  (0x0F)
-        uint8_t moduloMatch = (RF_SAMPLING_MASK & ADC_get_random_state());
+        // Whiten the "random" number because the LFSR gives long runs of similar lower bits.
+        // This significantly improves the uniformity of the distribution of RF level sampling
+        uint8_t moduloMatch = (RF_SAMPLING_MASK & (WHITENING ^ ADC_get_random_state()));
 
         // Measure the RF level with the ADC about once per second and add it to the running average to set the slicer
         // and detect whether there's any RF available to possibly decode.
@@ -238,7 +240,8 @@ void system_tick_handler(void)
         }
         
         RF_sample_bit();
-        
+    
+        // Charge the supercap if we're feeling spicy
         sChargingCap = SUPERCAP_charge();
     }
         
@@ -267,14 +270,14 @@ void main(void)
     // Turn on the regulator AS SOON AS POSSIBLE, to the exclusion
     // of every other priority
     PORTC = KEEP_ON_PIN; // Pull C0 high as soon as possible
-    TRISC = (uint8_t)~KEEP_ON_PIN;
-    ANSELC = (uint8_t)~KEEP_ON_PIN;
+    TRISC = (uint8_t)~KEEP_ON_PIN; // Connect as a digital output
 
     // Speed up HFINTOSC to 16 MHz as soon as we're done taking care of regulators. Do it
     // this way rather than starting with a higher Fosc (in the config bits) so that we
     // minimize current consumption while the KEEP_ON_PIN is not yet asserted
-    OSCFRQbits.HFFRQ = 0b101;
-    
+    OSCFRQ = 0b101; // 16 MHz HFINTOSC
+    OSCCON1 = 0b110 << 4 | 0b0000; // HFINTOSC, divisor 1, 16 MHz net
+
     setup();
     ei();
     
@@ -287,21 +290,25 @@ void main(void)
     RB5PPS = 0x1A; // Export to pin RB5 (pin 26))
     CLKRCONbits.CLKREN = 1; // enable clock output
 #endif
-    
+
     // Cache load
     PREFS_init();
-    
-    // Seed the random number generator with entropy
-    ADC_set_random_seed(ADC_gen_entropy() ^ ADC_read_vcc_fast());
+
+    // Seed the random number generator with entropy. Do only one call, since 
+    ADC_set_random_seed(ADC_read_vcc_fast());
+
+    // Service the system tick immediately
+    mUnhandledSystemTick = true;
     
     // Enable systick
     T0EN = 1;
-            
+        
     // Loop forever
     while(true)
     {
         if (mUnhandledSystemTick)
         {   
+            DEBUG_SET();
             mUnhandledSystemTick = false;
             
             // Enable BOR detection temporarily. Should respond within 2 us
@@ -318,6 +325,8 @@ void main(void)
             BORCON = 0x00; // Enable BOR detection temporarily
             
             switchSystemClock(false);
+            DEBUG_CLEAR();
+
         }
 
         // Wait for next interrupt

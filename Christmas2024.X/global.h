@@ -21,6 +21,9 @@
 #define MIN(a,b)        ((a < b) ? (a) : (b))
 #define MAX(a,b)        ((a > b) ? (a) : (b))
 
+#define DEBUG_SET()         LATC = (LATC | DEBUG_PIN)
+#define DEBUG_CLEAR()       LATC = (LATC & ~(DEBUG_PIN))
+#define DEBUG_VALUE(_x)     LATC = (LATC & ~(DEBUG_PIN)) | (!_x - 1)
 
 
 typedef void (*func_t)(void);
