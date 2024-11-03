@@ -51,17 +51,17 @@ OBJECTDIR=build/${CND_CONF}/${IMAGE_TYPE}
 DISTDIR=dist/${CND_CONF}/${IMAGE_TYPE}
 
 # Source Files Quoted if spaced
-SOURCEFILES_QUOTED_IF_SPACED=main.c adc.c leds.c prefs.c rf.c
+SOURCEFILES_QUOTED_IF_SPACED=main.c adc.c leds.c prefs.c rf.c supercap.c
 
 # Object Files Quoted if spaced
-OBJECTFILES_QUOTED_IF_SPACED=${OBJECTDIR}/main.p1 ${OBJECTDIR}/adc.p1 ${OBJECTDIR}/leds.p1 ${OBJECTDIR}/prefs.p1 ${OBJECTDIR}/rf.p1
-POSSIBLE_DEPFILES=${OBJECTDIR}/main.p1.d ${OBJECTDIR}/adc.p1.d ${OBJECTDIR}/leds.p1.d ${OBJECTDIR}/prefs.p1.d ${OBJECTDIR}/rf.p1.d
+OBJECTFILES_QUOTED_IF_SPACED=${OBJECTDIR}/main.p1 ${OBJECTDIR}/adc.p1 ${OBJECTDIR}/leds.p1 ${OBJECTDIR}/prefs.p1 ${OBJECTDIR}/rf.p1 ${OBJECTDIR}/supercap.p1
+POSSIBLE_DEPFILES=${OBJECTDIR}/main.p1.d ${OBJECTDIR}/adc.p1.d ${OBJECTDIR}/leds.p1.d ${OBJECTDIR}/prefs.p1.d ${OBJECTDIR}/rf.p1.d ${OBJECTDIR}/supercap.p1.d
 
 # Object Files
-OBJECTFILES=${OBJECTDIR}/main.p1 ${OBJECTDIR}/adc.p1 ${OBJECTDIR}/leds.p1 ${OBJECTDIR}/prefs.p1 ${OBJECTDIR}/rf.p1
+OBJECTFILES=${OBJECTDIR}/main.p1 ${OBJECTDIR}/adc.p1 ${OBJECTDIR}/leds.p1 ${OBJECTDIR}/prefs.p1 ${OBJECTDIR}/rf.p1 ${OBJECTDIR}/supercap.p1
 
 # Source Files
-SOURCEFILES=main.c adc.c leds.c prefs.c rf.c
+SOURCEFILES=main.c adc.c leds.c prefs.c rf.c supercap.c
 
 
 
@@ -128,6 +128,14 @@ ${OBJECTDIR}/rf.p1: rf.c  nbproject/Makefile-${CND_CONF}.mk
 	@-${MV} ${OBJECTDIR}/rf.d ${OBJECTDIR}/rf.p1.d 
 	@${FIXDEPS} ${OBJECTDIR}/rf.p1.d $(SILENT) -rsi ${MP_CC_DIR}../  
 	
+${OBJECTDIR}/supercap.p1: supercap.c  nbproject/Makefile-${CND_CONF}.mk 
+	@${MKDIR} "${OBJECTDIR}" 
+	@${RM} ${OBJECTDIR}/supercap.p1.d 
+	@${RM} ${OBJECTDIR}/supercap.p1 
+	${MP_CC} $(MP_EXTRA_CC_PRE) -mcpu=$(MP_PROCESSOR_OPTION) -c  -D__DEBUG=1  -mdebugger=icd3   -mdfp="${DFP_DIR}/xc8"  -fno-short-double -fno-short-float -O2 -fasmfile -maddrqual=require -xassembler-with-cpp -mwarn=-3 -Wa,-a -DXPRJ_default=$(CND_CONF)  -msummary=-psect,-class,+mem,-hex,-file  -ginhx32 -Wl,--data-init -mno-keep-startup -mno-osccal -mno-resetbits -mno-save-resetbits -mno-download -mno-stackcall -mdefault-config-bits $(COMPARISON_BUILD)  -std=c99 -gdwarf-3 -mstack=compiled:auto:auto     -o ${OBJECTDIR}/supercap.p1 supercap.c 
+	@-${MV} ${OBJECTDIR}/supercap.d ${OBJECTDIR}/supercap.p1.d 
+	@${FIXDEPS} ${OBJECTDIR}/supercap.p1.d $(SILENT) -rsi ${MP_CC_DIR}../  
+	
 else
 ${OBJECTDIR}/main.p1: main.c  nbproject/Makefile-${CND_CONF}.mk 
 	@${MKDIR} "${OBJECTDIR}" 
@@ -168,6 +176,14 @@ ${OBJECTDIR}/rf.p1: rf.c  nbproject/Makefile-${CND_CONF}.mk
 	${MP_CC} $(MP_EXTRA_CC_PRE) -mcpu=$(MP_PROCESSOR_OPTION) -c   -mdfp="${DFP_DIR}/xc8"  -fno-short-double -fno-short-float -O2 -fasmfile -maddrqual=require -xassembler-with-cpp -mwarn=-3 -Wa,-a -DXPRJ_default=$(CND_CONF)  -msummary=-psect,-class,+mem,-hex,-file  -ginhx32 -Wl,--data-init -mno-keep-startup -mno-osccal -mno-resetbits -mno-save-resetbits -mno-download -mno-stackcall -mdefault-config-bits $(COMPARISON_BUILD)  -std=c99 -gdwarf-3 -mstack=compiled:auto:auto     -o ${OBJECTDIR}/rf.p1 rf.c 
 	@-${MV} ${OBJECTDIR}/rf.d ${OBJECTDIR}/rf.p1.d 
 	@${FIXDEPS} ${OBJECTDIR}/rf.p1.d $(SILENT) -rsi ${MP_CC_DIR}../  
+	
+${OBJECTDIR}/supercap.p1: supercap.c  nbproject/Makefile-${CND_CONF}.mk 
+	@${MKDIR} "${OBJECTDIR}" 
+	@${RM} ${OBJECTDIR}/supercap.p1.d 
+	@${RM} ${OBJECTDIR}/supercap.p1 
+	${MP_CC} $(MP_EXTRA_CC_PRE) -mcpu=$(MP_PROCESSOR_OPTION) -c   -mdfp="${DFP_DIR}/xc8"  -fno-short-double -fno-short-float -O2 -fasmfile -maddrqual=require -xassembler-with-cpp -mwarn=-3 -Wa,-a -DXPRJ_default=$(CND_CONF)  -msummary=-psect,-class,+mem,-hex,-file  -ginhx32 -Wl,--data-init -mno-keep-startup -mno-osccal -mno-resetbits -mno-save-resetbits -mno-download -mno-stackcall -mdefault-config-bits $(COMPARISON_BUILD)  -std=c99 -gdwarf-3 -mstack=compiled:auto:auto     -o ${OBJECTDIR}/supercap.p1 supercap.c 
+	@-${MV} ${OBJECTDIR}/supercap.d ${OBJECTDIR}/supercap.p1.d 
+	@${FIXDEPS} ${OBJECTDIR}/supercap.p1.d $(SILENT) -rsi ${MP_CC_DIR}../  
 	
 endif
 

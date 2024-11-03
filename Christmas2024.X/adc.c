@@ -156,6 +156,38 @@ uint8_t ADC_read_rf(void)
     return (uint8_t)(ADRESH);    
 }
 
+// Read the supercap charge status. Only really valid while charging the cap. 
+// Returns ADC counts; if ADC counts are about equal to 2**10, there's no voltage
+// drop across the 3.3k resistor, so no charging is happening. Otherwise, the
+// difference in counts between 2**10 and the number returned, scaled by gVcc,
+// indicate the voltage drop and thus may be converted to charging current
+uint16_t ADC_read_cap(void)
+{
+    // Set ADC clock to internal (FRC), results right-justified
+    ADCON0 = 0b00010100;
+    
+    // Set the measured channel to RC5 (ANA0) and reference to Vdd
+    ADPCH = 0b010101;
+    ADREF = 0b00000000;
+    
+    // Set acquisition time to 10 ADC clocks (10 us)
+    ADACQ = 10;
+        
+    // Turn on ADC
+    ADON = 1;
+    
+    // Start conversion
+    ADGO = 1;
+    
+    // Wait for completion
+    while (ADGO);
+    
+    // Turn off ADC
+    ADON = 0;
+    
+    return ((uint16_t)ADRESH << 8) | ADRESL;    
+}
+
 // Linear feedback shift register random number generator. Has a period of 127.
 uint8_t ADC_random_int(void)
 {    

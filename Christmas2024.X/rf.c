@@ -154,14 +154,40 @@ static bool rf_frame_decode_hamming(uint64_t frameBits)
     // must be done iteratively (one place at a time) on this architecture
 #define RF_SAMPLES_BIT_OFFSET  0
     
-    uint8_t p1 = !!(frameBits & (1ULL << (7*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p2 = !!(frameBits & (1ULL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d1 = !!(frameBits & (1ULL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p3 = !!(frameBits & (1ULL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d2 = !!(frameBits & (1ULL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d3 = !!(frameBits & (1ULL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d4 = !!(frameBits & (1ULL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p4 = !!(frameBits & (1ULL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    // Check both the low and the high side of each bit to prevent false positives 
+    // The second half of the cycle (labeled "b" here) is the "true" bit state; we
+    // check the first half of the cycle to ensure it's consistent with the second half.
+    uint8_t p1a = !!(frameBits & (1ULL << (7*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p1b = !!(frameBits & (1ULL << (7*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p1 = p1b & !p1a;
+    
+    uint8_t p2a = !!(frameBits & (1ULL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p2b = !!(frameBits & (1ULL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p2 = p2b & !p2a;
+    
+    uint8_t d1a = !!(frameBits & (1ULL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d1b = !!(frameBits & (1ULL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d1 = d1b & !d1a;
+    
+    uint8_t p3a = !!(frameBits & (1ULL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p3b = !!(frameBits & (1ULL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p3 = p3b & !p3a;
+    
+    uint8_t d2a = !!(frameBits & (1ULL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d2b = !!(frameBits & (1ULL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d2 = d2b & !d2a;
+    
+    uint8_t d3a = !!(frameBits & (1ULL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d3b = !!(frameBits & (1ULL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d3 = d3b & !d3a;
+    
+    uint8_t d4a = !!(frameBits & (1ULL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d4b = !!(frameBits & (1ULL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t d4 = d4b & !d4a;
+    
+    uint8_t p4a = !!(frameBits & (1ULL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p4b = !!(frameBits & (1ULL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
+    uint8_t p4 = p4b & !p4a;
 
     // Calculate the syndrome using parity checks
     uint8_t s1 = p1 ^ d1 ^ d2 ^ d4;   // 2**0
@@ -330,10 +356,6 @@ void RF_sample_bit(void)
         {
             LED_blink_ack();
         }        
-        else
-        {
-            LED_blink_nack();
-        }
         
         // Clear the cache to prevent duplicates, since some packets can look a bit like
         // another Barker start sequence
@@ -342,7 +364,7 @@ void RF_sample_bit(void)
 }
 
 // Check the Vrf level with the ADC so that we can set the slicer level
-void RF_update_slicer_level(void)
+uint8_t RF_update_slicer_level(void)
 {
     uint8_t rfPortCounts = ADC_read_rf();
     
@@ -358,5 +380,7 @@ void RF_update_slicer_level(void)
         {
             mRfLevelPeak = level;
         }
-    }    
+    }  
+    
+    return mRfLevelPeak;
 }

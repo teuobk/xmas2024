@@ -24,6 +24,6 @@ const uint8_t cSetBitsInByte[256] = {
 
 
 void RF_sample_bit(void);
-void RF_update_slicer_level(void);
+uint8_t RF_update_slicer_level(void);
 
 #endif

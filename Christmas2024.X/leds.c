@@ -6,17 +6,19 @@
 // Macros and constants
 
 #define LED_CYCLE_LENGTH 0b00010000
+
 #define RF_ACK_LED_PIN          (3)
-#define RF_NACK_LED_PIN         (1)
-#define RF_ACK_BLINK_DURATION   (7)
-#define CAP_CHARGE_BLINK_DUR    (1)
+#define RF_LVL_LED_PIN          (1)
 #define HARVEST_STOKE_PIN       (3)
 
-#define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   6
+#define RF_ACK_BLINK_DURATION   (7) 
+#define RF_LVL_BLINK_DURATION   (3)
+
+#define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   7 // MUST per a power of 2 - 1
 #define LED_BLINK_LOW_THRESH_MV                 2400 // When the voltage is below this level, the situation is considered "low power" so the low time limit applies no matter the power mode
 
 #define LED_HARVEST_STOKER_THRESH_MV            2300 // Should be above the voltage at which the system will be powerd on LEDs alone
-#define LED_HARVEST_STOKER_TIME_MS              (20)
+#define LED_HARVEST_STOKER_TIME_MS              (18)
 
 #define PORT_C_NON_LED_MASK  (0xFC)
 
@@ -154,37 +156,34 @@ void LED_twinkle(void)
     mLedCounter++; // will automatically wrap after 255 ticks
     if (mLedCounter == UINT8_MAX)
     {
-        // Re-seed when we wrap. Keep it fresh! Remember that the 
-        ADC_set_random_seed(ADC_gen_entropy() ^ ADC_read_vcc_fast());
+        // Re-seed when we wrap. Keep it fresh! 
+        ADC_set_random_seed(ADC_get_random_state() ^ ADC_read_vcc_fast());
     }
 }
 
-// Show charging by rapid double-blinks of the amber LED (formerly the NACK LED))
-void LED_show_charging(uint8_t chargeLevel)
+// Show the RF level using what had been the NACK LED
+void LED_show_power(uint8_t powerLevel)
 {
-    static uint8_t sTickCount = 0;
-    
-    // Show a blink count corresponding to the charge level
-    if (sTickCount < chargeLevel)
-    {
-        PORTA = (uint8_t)(1 << RF_NACK_LED_PIN);
-    }
+    static uint8_t sCallCount = 0;
+#define NUM_POWER_LEVELS  (4)
 
-    sTickCount = (sTickCount + 1) & 0x07;
+    // Don't bother doing extra calculations if we're not going to show anything anyway
+    if (powerLevel > ((UINT8_MAX + 1) / NUM_POWER_LEVELS))
+    {
+        uint8_t powerLevelScaled = powerLevel / ((UINT8_MAX+1) / NUM_POWER_LEVELS);
+        if (sCallCount < powerLevelScaled)
+        {    
+            PORTA = (uint8_t)(1 << RF_LVL_LED_PIN);
+            TIMER_once(turnOffAllPortALeds, RF_LVL_BLINK_DURATION);
+        }
+    }
     
-    TIMER_once(turnOffAllPortALeds, CAP_CHARGE_BLINK_DUR);
+    sCallCount = (sCallCount + 1) % (NUM_POWER_LEVELS * 4);
 }
 
 // Blink the RF command ACK LED
 void LED_blink_ack(void)
 {
     PORTA = (uint8_t)(1 << RF_ACK_LED_PIN);
-    TIMER_once(turnOffAllPortALeds, RF_ACK_BLINK_DURATION);
-}
-
-// Blink the RF command NACK LED
-void LED_blink_nack(void)
-{
-    PORTA = (uint8_t)(1 << RF_NACK_LED_PIN);
     TIMER_once(turnOffAllPortALeds, RF_ACK_BLINK_DURATION);
 }

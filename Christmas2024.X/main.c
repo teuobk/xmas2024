@@ -5,6 +5,7 @@
 #include "prefs.h"
 #include "leds.h"
 #include "rf.h"
+#include "supercap.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -15,28 +16,12 @@
 
 // For best performance, sample after a power of 2 ticks
 #define SAMPLE_VCC_EVERY_TICKS      (32)
-#define SAMPLE_VRF_EVERY_TICKS      (16)
-
-// Supercap charging action thresholds [mV]
-#define SUPERCAP_CHRG_THRESH_SLOW      (2500)
-#define SUPERCAP_CHRG_THRESH_MEDIUM    (2700)
-#define SUPERCAP_CHRG_THRESH_FAST      (3000) // Should be chosen to be only just around USB power
-#define SUPERCAP_CHRG_THRESH_LIMITTER  (3450) // 3300 mV plus worst-case Schottky drop (at 10 uA on a hot day) of 200 mV, plus a little margin
-#define SUPERCAP_CHRG_THRESH_PROTECT   (3600) // 3300 mV plus typical Schottky drop of 300 mV at 100 uA for these packages
-#define SUPERCAP_CHRG_THRESH_INDICATE  (2800)
 
 // Increments above which high-latency timers will be used
 #define HIGH_LATENCY_TIMER_THRESH   (16 << 2) // multiplied by four due to the timer taking quarter-ms increments
 
 // Typedefs 
 
-typedef enum
-{
-    CHRG_LVL_OFF,
-    CHRG_LVL_LOW,
-    CHRG_LVL_MED,
-    CHRG_LVL_HIGH
-} charging_level_t;
 
 typedef enum
 {
@@ -79,7 +64,7 @@ void setup(void)
     
     // Digital output driver connection (default = 1 = push-pull driver disconnected)
     TRISC = /* Push-pull outputs */ (uint8_t)~(KEEP_ON_PIN | LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2 | DEBUG_PIN) |
-            /* Inputs or Weak pull-up output*/ (uint8_t)(SUPERCAP_CHRG_PIN | SUPERCAP_MED_CHRG_PIN | LED_STOKER_PIN);
+            /* Inputs or Weak pull-up output*/ (uint8_t)(SUPERCAP_MONITOR_PIN | SUPERCAP_MED_CHRG_PIN | LED_STOKER_PIN);
     TRISB = 0b11000000; // All port B outputs except programming pins
     TRISA = 0b00000001; // All outputs except RA0
     
@@ -217,122 +202,58 @@ void TIMER_once(func_t pCallback, uint8_t quarterMilliseconds)
     }
 }
 
-// Determine whether we should charge the supercap, and at what rate
-// Returns true if charging the supercap, false otherwise
-charging_level_t supercap_charge(void)
-{
-    charging_level_t chargingCap = CHRG_LVL_OFF;
-    
-    // Note how we're controlling only the TRIS connections for the relevant pins,
-    // as ANSEL affects only the input buffer (and thus we want to leave them 
-    // on "analog" especially if the net levels due to loading are in between digital ones)
-    
-    // Charge the supercap?
-    if (gVcc > SUPERCAP_CHRG_THRESH_PROTECT ||
-        !gPrefsCache.supercapChrgEn)
-    {
-        // Voltage is too high to safely charge the cap, or charging is disabled
-        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN));
-        TRISCbits.TRISC5 = 1;
-        TRISCbits.TRISC7 = 1;
-        WPUC5 = 0;
-    }
-    else if (gVcc > SUPERCAP_CHRG_THRESH_LIMITTER)
-    {
-        // Go back to slow charging as we're approaching the limit, and we want
-        // to take advantage of the diode drop and the current limit for
-        // the weak pull-up (which will be pretty low anyway at this point))
-        TRISCbits.TRISC5 = 1;
-        TRISCbits.TRISC7 = 1;
-        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN));
-        WPUC5 = 1;
-        chargingCap = CHRG_LVL_LOW;
-    }
-#ifdef ENABLE_MAX_SUPERCAP_CHARGING
-    else if (gVcc > SUPERCAP_CHRG_THRESH_FAST)
-    {
-        // Fast-charge cap (GPIO)
-        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN)) | SUPERCAP_CHRG_PIN; // RC5 = 1; // use LATC in case the starting level is low
-        TRISCbits.TRISC5 = 0;
-        TRISCbits.TRISC7 = 1;
-        WPUC5 = 0;
-        chargingCap = CHRG_LVL_HIGH;
-    }
-#endif
-    else if (gVcc > SUPERCAP_CHRG_THRESH_MEDIUM)
-    {
-        // Medium-charge cap (GPIO) (through the 3.3k resistor)
-        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN)) | SUPERCAP_MED_CHRG_PIN; // RC7 = 1; // use LATC in case the starting level is low
-        TRISCbits.TRISC5 = 1;
-        TRISCbits.TRISC7 = 0;
-        WPUC5 = 0;
-        chargingCap = CHRG_LVL_MED;
-    }
-    else if (gVcc > SUPERCAP_CHRG_THRESH_SLOW)
-    {
-        // Slow-charge cap (weak pull-up)
-        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN));
-        TRISCbits.TRISC5 = 1;
-        TRISCbits.TRISC7 = 1;
-        WPUC5 = 1;
-        chargingCap = CHRG_LVL_LOW;
-    }
-    else
-    {
-        // Stop charging cap (if we're doing so)
-        LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN));
-        TRISCbits.TRISC5 = 1;
-        TRISCbits.TRISC7 = 1;
-        WPUC5 = 0;
-    }   
-        
-    return chargingCap;
-}
 
 void system_tick_handler(void)
 {
-    static charging_level_t sChargingCap = false;
-    bool justReadVcc = false;
+    static bool sChargingCap = false;
+    static uint8_t sRfLevel = 0;
         
-    // Measure VDD with the ADC using the FVR about once every other second or on every tick 
-    // if we're charging the supercap (so as to avoid brownout), but not just after startup
-    if ( (gTickCount > (1*TICKS_PER_SEC) && (gTickCount % SAMPLE_VCC_EVERY_TICKS) == 0) ||
-        sChargingCap != CHRG_LVL_OFF)
+    // Avoid almost all of the slower work if we've just started up, as we might
+    // be in an extremely compromised power state
+    if (gTickCount > (1*TICKS_PER_SEC))
     {
-        gVcc = ADC_read_vcc();
-        justReadVcc = true;
-    }
-    
-    // Make sampling of RF voltages more random
-    uint8_t moduloMatch = (0x0F & ADC_get_random_state());
+        // Measure VDD with the ADC using the FVR about once every other second or on every tick 
+        // if we're charging the supercap (so as to avoid brownout), but not just after startup
+        if (gTickCount % SAMPLE_VCC_EVERY_TICKS == 0 ||
+            sChargingCap)
+        {
+            gVcc = ADC_read_vcc();
+        }
+        
+        // Make sampling of RF voltages more random
+#define RF_SAMPLING_MASK  (0x0F)
+        uint8_t moduloMatch = (RF_SAMPLING_MASK & ADC_get_random_state());
 
-    // Measure the RF level with the ADC about once per second and add it to the running average to set the slicer
-    // and detect whether there's any RF available to harvest, but not just after startup
-    if (gTickCount > (1*TICKS_PER_SEC) && 
-        (gTickCount % SAMPLE_VRF_EVERY_TICKS) == moduloMatch)
-    {
-        RF_update_slicer_level();
+        // Measure the RF level with the ADC about once per second and add it to the running average to set the slicer
+        // and detect whether there's any RF available to possibly decode.
+        // If the match is "< 4" out of 16, that's a hit on a given tick of 25% (i.e., with 50ms)
+        // that is roughly a 50% chance of sampling within 150 ms,
+        // a 75% chance of sampling within 250 ms,
+        // a 90% chance of sampling within 400 ms,
+        // and a 99% chance of sampling within 800 ms
+        // Given that the sampling history runs 8 deep, the history will cover about 1.2 seconds on average but between 0.4 s and 6 seconds 99% of the time
+        if (moduloMatch < 0x04) 
+        {
+            sRfLevel = RF_update_slicer_level();
+        }
+        
+        RF_sample_bit();
+        
+        sChargingCap = SUPERCAP_charge();
     }
         
-    RF_sample_bit();
-    
-    sChargingCap = supercap_charge();
-
     // Twinkle the LEDs, but only if we don't already have a status LED showing and only on every other tick (10 Hz)
     if (!mpTimerExpireCallback &&
-            ((gTickCount & 1) == 0))
+        ((gTickCount & 1) == 0))
     {
         LED_twinkle();
     }
     else
     {
-        // If we're not twinkling, show the charging status
-        if (!mpTimerExpireCallback &&
-            sChargingCap != CHRG_LVL_OFF &&
-            justReadVcc &&
-            gVcc > SUPERCAP_CHRG_THRESH_INDICATE)
+        // If we're not twinkling or using the fast callback timer for some other reason (like ACKing RF commands) show the RF status
+        if (!mpTimerExpireCallback)
         {
-            LED_show_charging((uint8_t)sChargingCap);
+            LED_show_power(sRfLevel);
         }
     }
     

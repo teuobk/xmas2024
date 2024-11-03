@@ -10,6 +10,7 @@
       <itemPath>prefs.h</itemPath>
       <itemPath>rf.h</itemPath>
       <itemPath>global.h</itemPath>
+      <itemPath>supercap.h</itemPath>
     </logicalFolder>
     <logicalFolder name="LinkerScript"
                    displayName="Linker Files"
@@ -23,6 +24,7 @@
       <itemPath>leds.c</itemPath>
       <itemPath>prefs.c</itemPath>
       <itemPath>rf.c</itemPath>
+      <itemPath>supercap.c</itemPath>
     </logicalFolder>
     <logicalFolder name="ExternalFiles"
                    displayName="Important Files"

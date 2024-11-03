@@ -9,7 +9,7 @@
 #define LED_BACKDRIVE_PIN_2     (uint8_t)(1 << 1) // on port C
 #define LED_STOKER_PIN          (uint8_t)(1 << 3) // on port C
 #define KEEP_ON_PIN             (uint8_t)(1 << 4) // on port C
-#define SUPERCAP_CHRG_PIN       (uint8_t)(1 << 5) // on port C
+#define SUPERCAP_MONITOR_PIN    (uint8_t)(1 << 5) // on port C
 #define DEBUG_PIN               (uint8_t)(1 << 6) // on port C
 #define SUPERCAP_MED_CHRG_PIN   (uint8_t)(1 << 7) // on port C
 
