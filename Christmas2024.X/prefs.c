@@ -4,7 +4,7 @@
 
 // Macros and constants
 
-#define PREFS_MAGIC_NUMBER      0x6E
+#define PREFS_MAGIC_NUMBER      0x5E
 
 typedef enum
 {
@@ -26,7 +26,7 @@ typedef enum
 
 const prefs_t cDefaultPrefs = 
 {
-    .blinkTimeLimit = 3,
+    .blinkTimeLimit = 7,  // MUST be a power of 2 minus 1
     
     .supercapChrgEn = true,
     .treeStarEn = false,
@@ -62,9 +62,6 @@ static const uint8_t crc8_table[256] = {
 
 // The actual underlying EEPROM storage location
 __eeprom uint8_t mPrefsEepromBacking[EEPROM_ADDR__LEN];
-//__eeprom uint8_t mPrefsEepromBacking0;
-//__eeprom uint8_t mPrefsEepromBacking1;
-//__eeprom uint8_t mPrefsEepromBacking2;
 
 // A shadow copy of what's in the EEPROM so we can quickly tell what's changed
 static prefs_t mPrefsEepromShadow;

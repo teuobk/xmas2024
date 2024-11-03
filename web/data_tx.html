@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Data Transmission Tool</title>
+    <title>Christmas Card Control</title>
 </head>
 <body>
     <button id="startButton">Power On</button>
@@ -12,11 +12,7 @@
     <!-- New buttons for predefined values -->
     <hr>
     <h3>LED power</h3>
-    <button id="ultralowPowerButton" disabled>Ultralow Power</button>
-    <br>
     <button id="normalPowerButton" disabled>Normal Power</button>
-    <br>
-    <button id="highPowerButton" disabled>High Power</button>
     <br>
     <button id="ultrahighPowerButton" disabled>Ultrahigh Power</button>
     <br>
@@ -56,20 +52,10 @@
 
             // New event listeners for predefined value buttons
             var otherButtons = [];
-            otherButtons.push(document.getElementById('ultralowPowerButton'));
-            document.getElementById('ultralowPowerButton').addEventListener('click', function() {
-                resetTimeout();
-                setDataAndSend('1');
-            });
             otherButtons.push(document.getElementById('normalPowerButton'));
             document.getElementById('normalPowerButton').addEventListener('click', function() {
                 resetTimeout();
                 setDataAndSend('2');
-            });
-            otherButtons.push(document.getElementById('highPowerButton'));
-            document.getElementById('highPowerButton').addEventListener('click', function() {
-                resetTimeout();
-                setDataAndSend('3');
             });
             otherButtons.push(document.getElementById('ultrahighPowerButton'));
             document.getElementById('ultrahighPowerButton').addEventListener('click', function() {

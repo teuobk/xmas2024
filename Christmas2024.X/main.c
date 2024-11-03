@@ -20,14 +20,23 @@
 // Supercap charging action thresholds [mV]
 #define SUPERCAP_CHRG_THRESH_SLOW      (2500)
 #define SUPERCAP_CHRG_THRESH_MEDIUM    (2700)
-#define SUPERCAP_CHRG_THRESH_FAST      (3000)
+#define SUPERCAP_CHRG_THRESH_FAST      (3000) // Should be chosen to be only just around USB power
 #define SUPERCAP_CHRG_THRESH_LIMITTER  (3450) // 3300 mV plus worst-case Schottky drop (at 10 uA on a hot day) of 200 mV, plus a little margin
 #define SUPERCAP_CHRG_THRESH_PROTECT   (3600) // 3300 mV plus typical Schottky drop of 300 mV at 100 uA for these packages
+#define SUPERCAP_CHRG_THRESH_INDICATE  (2800)
 
 // Increments above which high-latency timers will be used
-#define HIGH_LATENCY_TIMER_THRESH   (32)
+#define HIGH_LATENCY_TIMER_THRESH   (16 << 2) // multiplied by four due to the timer taking quarter-ms increments
 
 // Typedefs 
+
+typedef enum
+{
+    CHRG_LVL_OFF,
+    CHRG_LVL_LOW,
+    CHRG_LVL_MED,
+    CHRG_LVL_HIGH
+} charging_level_t;
 
 typedef enum
 {
@@ -105,7 +114,7 @@ void setup(void)
     
     // Timer6 -- Programmable callback
     T6CLKCON = 0x04; // LFINTOSC (31 kHz))
-    T6CONbits.CKPS = 0b100; // 1:16 prescaler, gives roughly 2 kHz rate
+    T6CONbits.CKPS = 0b011; // 1:8 prescaler, gives roughly 4 kHz rate
     
     
     //
@@ -126,7 +135,7 @@ void setup(void)
     // General peripheral interrupt enable
     PEIE = 1;
     
-    // Enable watchdog timer
+    // Enable watchdog timer. Set to a 2-second timeout in the config bits
     WDTCON0bits.SWDTEN = 1;
 }
 
@@ -185,22 +194,22 @@ void switchSystemClock(bool fast)
 }
 
 // Set up a timer to call the callback in the specified time
-// Does no bounds checking. Increments are half milliseconds (i.e., to 
-// have a 1 ms timeout, pass a value of 2)
+// Does no bounds checking. Increments are quarter milliseconds (i.e., to 
+// have a 1 ms timeout, pass a value of 4), though note that there is about 100 us of overhead
 // If the delay is longer than 16 ms, the timeout will be serviced with the
 // sysclock set to the LTFINTOSC, so latency will be high (but power consumption
 // will be low)
-void TIMER_once(func_t pCallback, uint8_t halfMilliseconds)
+void TIMER_once(func_t pCallback, uint8_t quarterMilliseconds)
 {
     // Start a new timer only if we don't already have one pending
     if (!mpTimerExpireCallback && 
-        halfMilliseconds > 0)
+        quarterMilliseconds > 0)
     {
         TMR6 = 0;
         mpTimerExpireCallback = pCallback;
         
         // The timer match effectively adds one, so compensate for that
-        T6PR = halfMilliseconds - 1;
+        T6PR = quarterMilliseconds - 1;
         
         TMR6IF = 0;
         TMR6IE = 1;
@@ -210,9 +219,9 @@ void TIMER_once(func_t pCallback, uint8_t halfMilliseconds)
 
 // Determine whether we should charge the supercap, and at what rate
 // Returns true if charging the supercap, false otherwise
-bool supercap_charge(void)
+charging_level_t supercap_charge(void)
 {
-    bool chargingCap = false;
+    charging_level_t chargingCap = CHRG_LVL_OFF;
     
     // Note how we're controlling only the TRIS connections for the relevant pins,
     // as ANSEL affects only the input buffer (and thus we want to leave them 
@@ -237,8 +246,9 @@ bool supercap_charge(void)
         TRISCbits.TRISC7 = 1;
         LATC = (LATC & ~(SUPERCAP_MED_CHRG_PIN | SUPERCAP_CHRG_PIN));
         WPUC5 = 1;
-        chargingCap = true;
+        chargingCap = CHRG_LVL_LOW;
     }
+#ifdef ENABLE_MAX_SUPERCAP_CHARGING
     else if (gVcc > SUPERCAP_CHRG_THRESH_FAST)
     {
         // Fast-charge cap (GPIO)
@@ -246,8 +256,9 @@ bool supercap_charge(void)
         TRISCbits.TRISC5 = 0;
         TRISCbits.TRISC7 = 1;
         WPUC5 = 0;
-        chargingCap = true;
+        chargingCap = CHRG_LVL_HIGH;
     }
+#endif
     else if (gVcc > SUPERCAP_CHRG_THRESH_MEDIUM)
     {
         // Medium-charge cap (GPIO) (through the 3.3k resistor)
@@ -255,7 +266,7 @@ bool supercap_charge(void)
         TRISCbits.TRISC5 = 1;
         TRISCbits.TRISC7 = 0;
         WPUC5 = 0;
-        chargingCap = true;
+        chargingCap = CHRG_LVL_MED;
     }
     else if (gVcc > SUPERCAP_CHRG_THRESH_SLOW)
     {
@@ -264,7 +275,7 @@ bool supercap_charge(void)
         TRISCbits.TRISC5 = 1;
         TRISCbits.TRISC7 = 1;
         WPUC5 = 1;
-        chargingCap = true;
+        chargingCap = CHRG_LVL_LOW;
     }
     else
     {
@@ -280,14 +291,16 @@ bool supercap_charge(void)
 
 void system_tick_handler(void)
 {
-    static bool sChargingCap = false;
+    static charging_level_t sChargingCap = false;
+    bool justReadVcc = false;
         
     // Measure VDD with the ADC using the FVR about once every other second or on every tick 
     // if we're charging the supercap (so as to avoid brownout), but not just after startup
     if ( (gTickCount > (1*TICKS_PER_SEC) && (gTickCount % SAMPLE_VCC_EVERY_TICKS) == 0) ||
-        sChargingCap)
+        sChargingCap != CHRG_LVL_OFF)
     {
         gVcc = ADC_read_vcc();
+        justReadVcc = true;
     }
     
     // Make sampling of RF voltages more random
@@ -310,6 +323,17 @@ void system_tick_handler(void)
             ((gTickCount & 1) == 0))
     {
         LED_twinkle();
+    }
+    else
+    {
+        // If we're not twinkling, show the charging status
+        if (!mpTimerExpireCallback &&
+            sChargingCap != CHRG_LVL_OFF &&
+            justReadVcc &&
+            gVcc > SUPERCAP_CHRG_THRESH_INDICATE)
+        {
+            LED_show_charging((uint8_t)sChargingCap);
+        }
     }
     
     // Pet watchdog
@@ -347,7 +371,7 @@ void main(void)
     PREFS_init();
     
     // Seed the random number generator with entropy
-    ADC_set_random_state(ADC_gen_entropy() ^ ADC_read_vcc_fast());
+    ADC_set_random_seed(ADC_gen_entropy() ^ ADC_read_vcc_fast());
     
     // Enable systick
     T0EN = 1;

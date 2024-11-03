@@ -6,5 +6,6 @@
 void LED_twinkle(void);
 void LED_blink_ack(void);
 void LED_blink_nack(void);
+void LED_show_charging(uint8_t chargeLevel);
 
 #endif

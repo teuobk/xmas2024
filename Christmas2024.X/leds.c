@@ -8,10 +8,11 @@
 #define LED_CYCLE_LENGTH 0b00010000
 #define RF_ACK_LED_PIN          (3)
 #define RF_NACK_LED_PIN         (1)
-#define RF_ACK_BLINK_DURATION   (5)
+#define RF_ACK_BLINK_DURATION   (7)
+#define CAP_CHARGE_BLINK_DUR    (1)
 #define HARVEST_STOKE_PIN       (3)
 
-#define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   0x03
+#define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   6
 #define LED_BLINK_LOW_THRESH_MV                 2400 // When the voltage is below this level, the situation is considered "low power" so the low time limit applies no matter the power mode
 
 #define LED_HARVEST_STOKER_THRESH_MV            2300 // Should be above the voltage at which the system will be powerd on LEDs alone
@@ -100,8 +101,7 @@ void LED_twinkle(void)
     // Also limit power if VCC is low
     timeLimit = (gVcc < LED_BLINK_LOW_THRESH_MV) ? MIN(timeLimit, LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS) : timeLimit;
     
-    // Variable length blink times, also ensuring blinkTime is non-zero. Will
-    // produce blinks between 500 us and 2 ms
+    // Variable length blink times, also ensuring blinkTime is non-zero
     uint8_t blinkTime = (randomInt & timeLimit) + 1;
     
     led_blink_prog_step_t currentStep = cLedTwinkle[remainder];
@@ -129,7 +129,7 @@ void LED_twinkle(void)
                 {
                     // "Stoke" with a weak pullup
                     WPUC3 = 1;
-                    TIMER_once(turnOffHarvestStoker, LED_HARVEST_STOKER_TIME_MS << 1);
+                    TIMER_once(turnOffHarvestStoker, LED_HARVEST_STOKER_TIME_MS << 2);
                 }
             }
             else if (gPrefsCache.harvestBlinkEn)
@@ -151,14 +151,30 @@ void LED_twinkle(void)
             break;            
     }
     
-    mLedCounter++; // will automatically wrap after 255 ticks    
-    // If we just wrapped, also perturb the random number generator state,
-    // being sure to keep it non-zero
-    if (mLedCounter == 0)
+    mLedCounter++; // will automatically wrap after 255 ticks
+    if (mLedCounter == UINT8_MAX)
     {
-        ADC_set_random_state(randomInt ^ (uint8_t)(gVcc & 0x00FF));
+        // Re-seed when we wrap. Keep it fresh! Remember that the 
+        ADC_set_random_seed(ADC_gen_entropy() ^ ADC_read_vcc_fast());
     }
 }
+
+// Show charging by rapid double-blinks of the amber LED (formerly the NACK LED))
+void LED_show_charging(uint8_t chargeLevel)
+{
+    static uint8_t sTickCount = 0;
+    
+    // Show a blink count corresponding to the charge level
+    if (sTickCount < chargeLevel)
+    {
+        PORTA = (uint8_t)(1 << RF_NACK_LED_PIN);
+    }
+
+    sTickCount = (sTickCount + 1) & 0x07;
+    
+    TIMER_once(turnOffAllPortALeds, CAP_CHARGE_BLINK_DUR);
+}
+
 // Blink the RF command ACK LED
 void LED_blink_ack(void)
 {

@@ -8,7 +8,8 @@
 
 // Variables
 
-static uint8_t mRandomState; // Seed generated later
+static uint8_t mRandomState; // Most recent PRNG state
+static uint8_t mRandomSeed; // Most recently set seed
 
 uint16_t gVcc = 0;
 
@@ -157,7 +158,7 @@ uint8_t ADC_read_rf(void)
 
 // Linear feedback shift register random number generator. Has a period of 127.
 uint8_t ADC_random_int(void)
-{
+{    
     // Generate feedback by XORing bits at specific taps
     // This next line is equivalent to feedback = ((mRandomState >> 6) ^ (mRandomState >> 5)) & 1;
     // except that it reduces the number of shifts, which must be done one at a time
@@ -171,10 +172,19 @@ uint8_t ADC_random_int(void)
     return mRandomState;
 }
 
-void ADC_set_random_state(uint8_t state)
+void ADC_set_random_seed(uint8_t seed)
 {
-    // Ensure it's non-zero
-    mRandomState = state | 1;
+    // Ensure it's non-zero and not the degenerate case (seed == 128)
+    if (seed == 0 || seed == 128)
+    {
+        mRandomSeed = 0x35;
+    }
+    else
+    {
+        mRandomSeed = seed;    
+    }
+
+    mRandomState = mRandomSeed;    
 }
 
 // Return the most recent random number

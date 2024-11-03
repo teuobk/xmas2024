@@ -8,7 +8,6 @@
 // Macros and constants
 
 #define RF_BARKER_SEQ     (0b1111111000000111UL)  // 11001 raw
-//#define RF_BARKER_SEQ   (0b0000111111001100UL)  // 1110010 raw, with bits doubled 7-Barker
 #define RF_NET_PAYLOAD_LEN_INC_ECC (8) // for an 8,4 Hamming code
 #define RF_SAMPLES_PER_BIT  (6)
 #define RF_RAW_PAYLOAD_LEN_SAMPLES  (RF_NET_PAYLOAD_LEN_INC_ECC * RF_SAMPLES_PER_BIT) // for Manchester coding
@@ -16,7 +15,7 @@
 #define NUM_SAMPLES_TO_AVERAGE_FOR_SLICER   (8) // must be power of 2
 
 // Don't bother looking for RF traffic if the RF level isn't very high to begin with
-#define RF_LEVEL_MIN_FOR_COMMS_COUNTS       (64)
+#define RF_LEVEL_MIN_FOR_COMMS_COUNTS       (32)
 
 // Typedefs
 
@@ -70,7 +69,7 @@ static bool rf_command_handler(uint8_t decodedWord)
 //            break;
         case CMD_PWR_NORM:
             // Time limit 1500 us, harvest LED blinks OK
-            prefsTemp.blinkTimeLimit = 3; // MUST be a power of 2 minus 1
+            prefsTemp.blinkTimeLimit = 7; // MUST be a power of 2 minus 1
             prefsTemp.harvestBlinkEn = true;
             prefsTemp.harvestRailChargeEn = true;
             break;
@@ -82,7 +81,7 @@ static bool rf_command_handler(uint8_t decodedWord)
 //            break;
         case CMD_PWR_ULTRAHIGH:
             // Time limit 5000 us, harvest LED blinks OK, drive harvest high-side
-            prefsTemp.blinkTimeLimit = 15; // MUST be a power of 2 minus 1
+            prefsTemp.blinkTimeLimit = 31; // MUST be a power of 2 minus 1
             prefsTemp.harvestBlinkEn = true;
             prefsTemp.harvestRailChargeEn = true;
             break;

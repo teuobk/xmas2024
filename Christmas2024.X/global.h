@@ -21,6 +21,8 @@
 #define MIN(a,b)        ((a < b) ? (a) : (b))
 #define MAX(a,b)        ((a > b) ? (a) : (b))
 
+
+
 typedef void (*func_t)(void);
 
 extern uint32_t gTickCount; // absolute tick count
