@@ -22,20 +22,18 @@
 typedef enum
 {
     // Zero is reserved, to guard against an all-zeros packet
-            
-    CMD_PWR_ULTRALOW = 1,
-    CMD_PWR_NORM,
-    CMD_PWR_HIGH,
-    CMD_PWR_ULTRAHIGH,
+            // Avoid codewords that have runs of 0s or 1s of 3 or more
+    CMD_PWR_NORM = 1,
+    CMD_PWR_ULTRAHIGH = 2,
 
     CMD_SUPERCAP_CHRG_DIS = 5,
-    CMD_SUPERCAP_CHRG_EN,
+    CMD_SUPERCAP_CHRG_EN = 6,
 
-    CMD_TREE_STAR_DIS = 7,
-    CMD_TREE_STAR_EN,
+    CMD_TREE_STAR_DIS = 9,
+    CMD_TREE_STAR_EN = 10,
             
-    CMD_UNLOCK = 9,
-    CMD_SELF_TEST = 10,
+    CMD_UNLOCK = 11,
+    CMD_SELF_TEST = 14,
             
     // 0x0F is also reserved, to guard against an all-ones packet
 
