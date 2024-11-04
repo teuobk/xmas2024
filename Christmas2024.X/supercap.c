@@ -45,6 +45,7 @@ static bool mLastCharging = false;
 // Update the state machine. Returns true if charging in any way, false otherwise
 bool SUPERCAP_charge(void)
 {
+    static uint8_t sTicksVoltageGoodForUpshift = 0;
     bool isCharging = mLastCharging;
     cap_charging_state_t newState = mCapStateMachineState;
     
@@ -59,10 +60,23 @@ bool SUPERCAP_charge(void)
             break;
         case CAP_STATE_CHARGING_OFF:
             if (gVcc > SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MIN &&
-                gVcc < SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MAX &&
-                (gTickCount - mTicksAtStateEntry) > TICKS_TO_CALL_STABLE)
+                gVcc < SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MAX)
             {
-                newState = CAP_STATE_CHARGING_SLOWLY;
+                // Have we had a stable voltage long enough to justify starting charging?
+                if (sTicksVoltageGoodForUpshift > TICKS_TO_CALL_STABLE)
+                {
+                    newState = CAP_STATE_CHARGING_SLOWLY;
+                    sTicksVoltageGoodForUpshift = 0;
+                }
+                else
+                {
+                    sTicksVoltageGoodForUpshift++;
+                }
+            }
+            else
+            {
+                // Voltage hasn't been stable enough
+                sTicksVoltageGoodForUpshift = 0;
             }
             break;
         case CAP_STATE_CHARGING_SLOWLY:
@@ -71,10 +85,21 @@ bool SUPERCAP_charge(void)
             {
                 newState = CAP_STATE_CHARGING_OFF;
             }
-            else if (gVcc > SUPERCAP_CHRG_THRESH_SLOW_TO_FAST &&
-                    (gTickCount - mTicksAtStateEntry) > TICKS_TO_CALL_STABLE)
+            else if (gVcc > SUPERCAP_CHRG_THRESH_SLOW_TO_FAST)   
             {
-                newState = CAP_STATE_CHARGING_QUICKLY;
+                if (sTicksVoltageGoodForUpshift > TICKS_TO_CALL_STABLE)
+                {
+                    newState = CAP_STATE_CHARGING_QUICKLY;
+                    sTicksVoltageGoodForUpshift = 0;
+                }
+                else
+                {
+                    sTicksVoltageGoodForUpshift++;
+                }
+            }
+            else
+            {
+                sTicksVoltageGoodForUpshift = 0;
             }
             break;
         case CAP_STATE_CHARGING_QUICKLY:
