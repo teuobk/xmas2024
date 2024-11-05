@@ -15,7 +15,6 @@
 #define RF_LVL_BLINK_DURATION   (3)
 
 #define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   7 // MUST per a power of 2 - 1
-#define LED_BLINK_LOW_THRESH_MV                 2400 // When the voltage is below this level, the situation is considered "low power" so the low time limit applies no matter the power mode
 
 #define LED_HARVEST_STOKER_THRESH_MV            2300 // Should be above the voltage at which the system will be powerd on LEDs alone
 #define LED_HARVEST_STOKER_TIME_MS              (18)
@@ -93,13 +92,6 @@ static void turnOffHarvestStoker(void)
 // Twinkle the tree LEDs
 void LED_twinkle(void)
 {   
-    // Blink only every tick for normal power, skipping the rest of this
-    if ((gTickCount & 1) != 0 && 
-            (!gPrefsCache.fastBlinksEn || gVcc < LED_BLINK_LOW_THRESH_MV))
-    {
-        return;
-    }
-    
     uint8_t randomInt = ADC_random_int();
     uint8_t remainder = ((randomInt + mLedCounter) % LED_CYCLE_LENGTH);
          

@@ -209,7 +209,8 @@ void system_tick_handler(void)
 {
     static bool sChargingCap = false;
     static uint8_t sRfLevel = 0;
-        
+    bool twinkled = false;
+    
     // Avoid almost all of the slower work if we've just started up, as we might
     // be in an extremely compromised power state
     if (gTickCount > (1*TICKS_PER_SEC))
@@ -244,20 +245,27 @@ void system_tick_handler(void)
         // Charge the supercap if we're feeling spicy
         sChargingCap = SUPERCAP_charge();
     }
-        
-    // Twinkle the LEDs, but only if we don't already have a status LED showing and only on every other tick (10 Hz)
-    if (!mpTimerExpireCallback)
+    
+    // If we're not twinkling or using the fast callback timer for some other reason (like ACKing RF commands) show the RF status
+    if ((gTickCount & 1))
     {
-        LED_twinkle();
-    }
-    else
-    {
-        // If we're not twinkling or using the fast callback timer for some other reason (like ACKing RF commands) show the RF status
         if (!mpTimerExpireCallback)
         {
             LED_show_power(sRfLevel);
         }
     }
+    
+    // Twinkle the LEDs, but only if we don't already have a status LED showing and only on every other tick (10 Hz)
+    // Blink only every tick for normal power, skipping the rest of this.
+    // NOTE: This is not an "else" to the RF blink!
+    if ((gTickCount & 1) == 0 ||
+            (gPrefsCache.fastBlinksEn && gVcc > LED_BLINK_LOW_THRESH_MV))
+    {
+        if (!mpTimerExpireCallback)
+        {
+            LED_twinkle();
+        }
+    }    
     
     // Pet watchdog
     CLRWDT();
