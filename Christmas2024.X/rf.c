@@ -7,11 +7,12 @@
 
 // Macros and constants
 
-#define RF_BARKER_SEQ     (0b1000111000000111UL)  // 01001 raw, with a prepended 1
-#define RF_NET_PAYLOAD_LEN_INC_ECC (8) // for an 8,4 Hamming code
-#define RF_SAMPLES_PER_BIT  (6)
-#define RF_RAW_PAYLOAD_LEN_SAMPLES  (RF_NET_PAYLOAD_LEN_INC_ECC * RF_SAMPLES_PER_BIT) // for Manchester coding
-
+#define RF_BARKER_SEQ     (0b1111111000000111UL)  // 11001 raw, with a prepended 1
+#define RF_RAW_PAYLOAD_LEN (16)
+#define RF_SAMPLES_PER_BIT  (3)
+#define RF_SAMPLES_BIT_OFFSET  (0)
+#define RF_RAW_PAYLOAD_LEN_SAMPLES  (RF_RAW_PAYLOAD_LEN * RF_SAMPLES_PER_BIT)
+#define RF_MIN_CORR_FOR_CODEWORD_ACCEPT     (13) // based on the Hamming distance of the codewords being at worst 4
 #define NUM_SAMPLES_TO_AVERAGE_FOR_SLICER   (8) // must be power of 2
 
 // Don't bother looking for RF traffic if the RF level isn't very high to begin with
@@ -19,6 +20,11 @@
 
 
 // Command codewords
+// These were chosen to have:
+// * Low autocorrelation with +/- 1 bit timing shifts (resistance to false-positives due to timing errors)
+// * High correlation between the first byte and the second byte (resilience to burst errors and bit flips)
+// * Limited runs of 1s and 0s, no more than 3 1s or 2 0s in a row (long runs of 0s are problematic when powering the board from RF)
+// * High Hamming distance, at least distance 4 between any two codewords (immunity to mismatches)
 #define RF_CODEWORD_0       (0b1001001110010011)
 #define RF_CODEWORD_1       (0b0100100101001001)
 #define RF_CODEWORD_2       (0b1001010110010101)
@@ -27,7 +33,7 @@
 #define RF_CODEWORD_5       (0b1110100111001101)
 #define RF_CODEWORD_6       (0b0010101100110111)
 #define RF_CODEWORD_7       (0b1110011010111001)
-
+#define RF_CODEWORD__NUM    (8)
 
 // Typedefs
 
@@ -35,24 +41,41 @@ typedef enum
 {
     // Zero is reserved, to guard against an all-zeros packet
             // Avoid codewords that have runs of 0s or 1s of 3 or more
-    CMD_PWR_NORM = 1,
-    CMD_PWR_ULTRAHIGH = 2,
+    CMD_PWR_NORM = 0,
+    CMD_PWR_ULTRAHIGH = 1,
 
-    CMD_SUPERCAP_CHRG_DIS = 5,
-    CMD_SUPERCAP_CHRG_EN = 6,
+    CMD_SUPERCAP_CHRG_DIS = 2,
+    CMD_SUPERCAP_CHRG_EN = 3,
 
-    CMD_TREE_STAR_DIS = 9,
-    CMD_TREE_STAR_EN = 10,
+    CMD_TREE_STAR_DIS = 4,
+    CMD_TREE_STAR_EN = 5,
             
-    CMD_UNLOCK = 11,
-    CMD_SELF_TEST = 14,
+    CMD_SELF_TEST = 6,
+    CMD_UNLOCK = 7,
             
     // 0x0F is also reserved, to guard against an all-ones packet
 
 } rf_cmd_id_t;
 
+typedef union 
+{
+    uint16_t    word;
+    uint8_t     bytes[sizeof(uint16_t)];
+} bytewise_16_t;
 
 // Variables
+
+static const uint16_t cCodewords[RF_CODEWORD__NUM] = 
+{
+    RF_CODEWORD_0,
+    RF_CODEWORD_1,
+    RF_CODEWORD_2,
+    RF_CODEWORD_3,
+    RF_CODEWORD_4,
+    RF_CODEWORD_5,
+    RF_CODEWORD_6,
+    RF_CODEWORD_7,
+};
 
 static uint8_t mRfLevelSamples[NUM_SAMPLES_TO_AVERAGE_FOR_SLICER] = {0}; // in 8-bit ADC counts relative to Vdd
 static uint8_t mRfLevelIndex = 0; 
@@ -63,6 +86,32 @@ static uint64_t mBitCache = 0;
 static bool mCommandUnlocked = false;
 
 // Implementations
+
+// Compute the correlation between a and b, with 0s interpreted as -1s, using
+// the given number of bytes for the calculation (counted from the LSB)
+static int8_t rf_compute_correlation(uint16_t a, uint16_t b, uint8_t startByte, uint8_t endByte)
+{
+    int8_t corr = 0;
+    bytewise_16_t pA;
+    bytewise_16_t pB;
+
+    pA.word = a;
+    pB.word = b;
+
+    // Compare from LSB to MSB, since we're big-endian
+    for (uint8_t i = startByte; i <= endByte; i++)
+    {
+        uint8_t byte_a = pA.bytes[i];
+        uint8_t byte_b = pB.bytes[i];
+
+        uint8_t difference = byte_a ^ byte_b;
+        uint8_t numDifferences = cSetBitsInByte[difference];
+        corr += (8 - numDifferences);
+    }
+
+    return corr;
+}
+
 
 static bool rf_command_handler(uint8_t decodedWord)
 {
@@ -127,7 +176,7 @@ static bool rf_command_handler(uint8_t decodedWord)
             break;
         case CMD_UNLOCK:
             // Enable special/restricted command on the next received frame only
-            mCommandUnlocked = true;
+            // Actual flag toggle comes after this block
             commandSuccess = false; // don't reveal it was a valid command
             break;
         case CMD_SELF_TEST:
@@ -138,8 +187,18 @@ static bool rf_command_handler(uint8_t decodedWord)
             commandSuccess = false;
             break;
     }
-        
-    mCommandUnlocked = false;
+    
+    // Touch up the unlocked state
+    if (decodedWord == CMD_UNLOCK)
+    {
+        mCommandUnlocked = true;
+    }        
+    else
+    {
+        mCommandUnlocked = false;
+    }
+    
+
     
     // Build multi-byte command
     
@@ -151,9 +210,9 @@ static bool rf_command_handler(uint8_t decodedWord)
     return commandSuccess;
 }
 
-// Decode the frame, including correcting up to 1 flipped bit, using
-// an [8,4] Hamming code
-static bool rf_frame_decode_hamming(uint64_t frameBits)
+
+
+static bool rf_frame_decode(uint64_t frameBits)
 {
     bool cmdSuccess = false;
     bool decodeSuccess = false;
@@ -161,97 +220,49 @@ static bool rf_frame_decode_hamming(uint64_t frameBits)
     
     // Extract the individual bits from the encoded byte
     // Done with ANDs of shifted literals to avoid rotations, which
-    // must be done iteratively (one place at a time) on this architecture
-#define RF_SAMPLES_BIT_OFFSET  0
+    // must be done iteratively (one place at a time) on this architecture.
+    // Also note how this has effectively been done as an unrolled loop, again to
+    // avoid bitwise rotations
     
-    // Check both the low and the high side of each bit to prevent false positives 
-    // The second half of the cycle (labeled "b" here) is the "true" bit state; we
-    // check the first half of the cycle to ensure it's consistent with the second half.
-    uint8_t p1a = !!(frameBits & (1ULL << (7*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p1b = !!(frameBits & (1ULL << (7*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p1 = p1b & !p1a;
+    uint16_t reconstructed = 0;
     
-    uint8_t p2a = !!(frameBits & (1ULL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p2b = !!(frameBits & (1ULL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p2 = p2b;// & !p2a;
+    // Each of these steps does some bit-flipping and such, all to get around the TOTAL CRAP that is the XC8 compiler.
+    // Basically, we convert a set bit in the position of interest to a zero, then subtract 1 to convert to 0xFFFF,
+    // then mask that with the bit we actually want to set. On the other hand, if the bit of interest started as 0, 
+    // the logical-not will convert it to a 0x0001, so subtracting 1 will get 0, so we'll get a cleared bit in
+    // our output position
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 15) & (uint16_t)(!(frameBits & (1ULL << (15*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 14) & (uint16_t)(!(frameBits & (1ULL << (14*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 13) & (uint16_t)(!(frameBits & (1ULL << (13*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 12) & (uint16_t)(!(frameBits & (1ULL << (12*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 11) & (uint16_t)(!(frameBits & (1ULL << (11*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 10) & (uint16_t)(!(frameBits & (1ULL << (10*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 9) & (uint16_t)(!(frameBits & (1ULL << (9*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 8) & (uint16_t)(!(frameBits & (1ULL << (8*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 7) & (uint16_t)(!(frameBits & (1ULL << (7*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 6) & (uint16_t)(!(frameBits & (1ULL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 5) & (uint16_t)(!(frameBits & (1ULL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 4) & (uint16_t)(!(frameBits & (1ULL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 3) & (uint16_t)(!(frameBits & (1ULL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 2) & (uint16_t)(!(frameBits & (1ULL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 1) & (uint16_t)(!(frameBits & (1ULL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
+    reconstructed |= (uint16_t)((uint16_t)(1UL << 0) & (uint16_t)(!(frameBits & (1ULL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))) - 1)); 
     
-    uint8_t d1a = !!(frameBits & (1ULL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d1b = !!(frameBits & (1ULL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d1 = d1b;// & !d1a;
-    
-    uint8_t p3a = !!(frameBits & (1ULL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p3b = !!(frameBits & (1ULL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p3 = p3b;// & !p3a;
-    
-    uint8_t d2a = !!(frameBits & (1ULL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d2b = !!(frameBits & (1ULL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d2 = d2b;// & !d2a;
-    
-    uint8_t d3a = !!(frameBits & (1ULL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d3b = !!(frameBits & (1ULL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d3 = d3b;// & !d3a;
-    
-    uint8_t d4a = !!(frameBits & (1ULL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d4b = !!(frameBits & (1ULL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d4 = d4b;// & !d4a;
-    
-    uint8_t p4a = !!(frameBits & (1ULL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p4b = !!(frameBits & (1ULL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p4 = p4b;// & !p4a;
-
-    // Calculate the syndrome using parity checks
-    uint8_t s1 = p1 ^ d1 ^ d2 ^ d4;   // 2**0
-    uint8_t s2 = p2 ^ d1 ^ d3 ^ d4;   // 2**1
-    uint8_t s3 = p3 ^ d2 ^ d3 ^ d4;   // 2**2
-    uint8_t cc = p1 ^ p2 ^ p3 ^ p4 ^ d1 ^ d2 ^ d3 ^ d4;   // overall parity, for double-error detection
-
-    // Combine the syndrome bits into a single value. Only the syndrome bits are used.
-    uint8_t syndrome = (uint8_t)((s3 << 2) | (s2 << 1) | (s1 << 0));
-
-    if (syndrome == 0) 
+    int8_t highestCorrelation = 0;
+    uint8_t codewordWithHighestCorr = RF_CODEWORD__NUM;
+    for (uint8_t i = 0; i < RF_CODEWORD__NUM; i++)
     {
-        // No errors, or the error was in the overall parity bit only (if cc != 0),
-        // so extract the data nibble
-        decodedFrame = (uint8_t)((d1 << 3) | (d2 << 2) | (d3 << 1) | d4);
-        decodeSuccess = true;
-    } 
-    else if (cc == 1) // and syndrome != 0, of course
-    {
-        // Single-bit error, so correctable
-        if (syndrome == 3) // fix d1
+        int8_t corr = rf_compute_correlation(reconstructed, cCodewords[i], 0, 1);
+        if (corr > highestCorrelation)
         {
-            d1 ^= 1;
+            highestCorrelation = corr;
+            codewordWithHighestCorr = i;
         }
-        else if (syndrome == 5) // fix d2
-        {
-            d2 ^= 1;
-        }
-        else if (syndrome == 6) // fix d3
-        {
-            d3 ^= 1;
-        }
-        else if (syndrome == 7) // fix d4
-        {
-            d4 ^= 1;
-        }
-        else
-        {
-            // Error was in a parity bit, so ignore
-        }
-
-        // Extract the corrected data nibble
-        decodedFrame = (uint8_t)((d1 << 3) | (d2 << 2) | (d3 << 1) | d4);
-        decodeSuccess = true;
-    } 
-    else 
-    {
-        // Uncorrectable error (two bits of error)
     }
     
-    // If successful decode, handle the command
-    if (decodeSuccess)
+    if (highestCorrelation >= RF_MIN_CORR_FOR_CODEWORD_ACCEPT)
     {
-        cmdSuccess = rf_command_handler(decodedFrame);
+        cmdSuccess = rf_command_handler(codewordWithHighestCorr);
     }
     
     return cmdSuccess;
@@ -300,37 +311,6 @@ static uint8_t rf_read_comparator(void)
     return bitValue;
 }
 
-typedef union 
-{
-    uint16_t    word;
-    uint8_t     bytes[sizeof(uint16_t)];
-} bytewise_16_t;
-
-// Compute the correlation between a and b, with 0s interpreted as -1s, using
-// the given number of bytes for the calculation (counted from the LSB)
-static int8_t rf_compute_correlation(uint16_t a, uint16_t b, uint8_t startByte, uint8_t endByte)
-{
-    int8_t corr = 0;
-    bytewise_16_t pA;
-    bytewise_16_t pB;
-    
-    pA.word = a;
-    pB.word = b;
-    
-    // Compare from LSB to MSB, since we're big-endian
-    for (uint8_t i = startByte; i <= endByte; i++)
-    {
-        uint8_t byte_a = pA.bytes[i];
-        uint8_t byte_b = pB.bytes[i];
-        
-        uint8_t difference = byte_a ^ byte_b;
-        uint8_t numDifferences = cSetBitsInByte[difference];
-        corr += (8 - numDifferences);
-    }
-    
-    return corr;
-}
-
 
 // Sample another bit from the RF data tap and kick off command handling
 // if it looks like we might have a command
@@ -362,7 +342,7 @@ void RF_sample_bit(void)
 #define BARKER_CORR_THRESH  (14) // TBD
     if (barkerCorr > BARKER_CORR_THRESH)
     {
-        if (rf_frame_decode_hamming(mBitCache))
+        if (rf_frame_decode(mBitCache))
         {
             LED_blink_ack();
         }        

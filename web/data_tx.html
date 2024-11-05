@@ -30,6 +30,17 @@
             var sendButton = document.getElementById('sendButton');
             var dataInput = document.getElementById('dataInput');
 
+            var codewords = [
+                37779,
+                18761,
+                38293,
+                21331,
+                9509,
+                59853,
+                11063,
+                59065,
+            ];
+
             var isRunning = false;
             var isTransmittingData = false;
             var carrierTimerId = null;
@@ -55,22 +66,22 @@
             otherButtons.push(document.getElementById('normalPowerButton'));
             document.getElementById('normalPowerButton').addEventListener('click', function() {
                 resetTimeout();
-                setDataAndSend('1');
+                setDataAndSend('0');
             });
             otherButtons.push(document.getElementById('ultrahighPowerButton'));
             document.getElementById('ultrahighPowerButton').addEventListener('click', function() {
                 resetTimeout();
-                setDataAndSend('2');
+                setDataAndSend('1');
             });
             otherButtons.push(document.getElementById('disableTreeStarButton'));
             document.getElementById('disableTreeStarButton').addEventListener('click', function() {
                 resetTimeout();
-                setDataAndSend('9');
+                setDataAndSend('4');
             });
             otherButtons.push(document.getElementById('enableTreeStarButton'));
             document.getElementById('enableTreeStarButton').addEventListener('click', function() {
                 resetTimeout();
-                setDataAndSend('A');
+                setDataAndSend('5');
             });
 
             function resetTimeout() {
@@ -152,14 +163,26 @@
 
                 carrierTimerId = setTimeout(sendCarrierData, 0);
             }
+            
+            function spreading(nibble) {
+                var cmdId = codewords[nibble];
+                var output = [];
+                for (var i = 0; i < 16; i++)
+                {
+                    var bit = (cmdId >> (15 - i)) & 1;
+                    output.push(bit);
+                }
+
+                return output;
+            }
 
             function sendData() {
                 if (!isRunning || isTransmittingData) return;
                 sendButton.disabled = true;
                 otherButtons.forEach(x => x.disabled = true);
                 var hexValue = dataInput.value.trim();
-                if (!/^[0-9A-Fa-f]$/.test(hexValue)) {
-                    alert('Please enter a valid hexadecimal digit (0-9, A-F).');
+                if (!/^[0-7]$/.test(hexValue)) {
+                    alert('Please enter a valid digit (0-7).');
                     return;
                 }
 
@@ -172,11 +195,11 @@
                 symbolIndex = 0;
 
                 var nibble = parseInt(hexValue, 16) & 0xF;
-                var encodedData = hammingEncode(nibble);
+                var encodedData = spreading(nibble);
 
-                console.log("Hamming[8,4] encoded %d: " + JSON.stringify(encodedData), nibble);
+                console.log("Spread value %d: " + JSON.stringify(encodedData), nibble);
 
-                var preamble = [0, 1];
+                var preamble = [1, 1, 0, 0, 1];
 
                 symbols = preamble.map(function(value) {
                     return value;
@@ -187,25 +210,25 @@
                     symbols.push(bit);
                 }
 
-                console.log("Phase symbols including 2-Barker prefix: " + JSON.stringify(symbols));
+                console.log("Bits including prefix: " + JSON.stringify(symbols));
 
                 transmitSymbol();
             }
 
-            function transmitOnOff(firstDuration, secondDuration, isFirstPeriodOn, callback) {
+            function transmitOnOff(bitDuration, bitIsSet, callback) {
                 var firstStartTime = Date.now();
 
                 function firstPeriod() {
                     if (!isRunning || !isTransmittingData) return;
 
                     var now = Date.now();
-                    if (now - firstStartTime >= firstDuration) {
-                        // First period over, start second period
-                        secondPeriod();
+                    if (now - firstStartTime >= bitDuration) {
+                        // Second period over, proceed to next symbol
+                        callback();
                         return;
                     }
 
-                    if (isFirstPeriodOn) {
+                    if (bitIsSet) {
                         if (socket && socket.readyState === WebSocket.OPEN && socket.bufferedAmount === 0) {
                             // Send data during "on" period
                             var size = 5 * 1024; // 5 KB
@@ -216,35 +239,6 @@
 
                     // Continue during first period
                     setTimeout(firstPeriod, 0);
-                }
-
-                function secondPeriod() {
-                    var secondStartTime = Date.now();
-
-                    function secondPeriodInner() {
-                        if (!isRunning || !isTransmittingData) return;
-
-                        var now = Date.now();
-                        if (now - secondStartTime >= secondDuration) {
-                            // Second period over, proceed to next symbol
-                            callback();
-                            return;
-                        }
-
-                        if (!isFirstPeriodOn) {
-                            if (socket && socket.readyState === WebSocket.OPEN && socket.bufferedAmount === 0) {
-                                // Send data during "on" period
-                                var size = 5 * 1024; // 5 KB
-                                var data = generatePrintableData(size);
-                                socket.send(data);
-                            }
-                        }
-
-                        // Continue during second period
-                        setTimeout(secondPeriodInner, 0);
-                    }
-
-                    secondPeriodInner();
                 }
 
                 firstPeriod();
@@ -269,30 +263,12 @@
                 var symbol = symbols[symbolIndex];
                 symbolIndex++;
 
-                var onDuration = 150;
-                var offDuration = 150;
+                var bitDuration = 150;
 
-                var firstPeriodIsOn = (symbol === 0);
-
-                transmitOnOff(onDuration, offDuration, firstPeriodIsOn, transmitSymbol);
+                transmitOnOff(bitDuration, symbol, transmitSymbol);
             }
 
-            function hammingEncode(nibble) {
-                var d = [
-                    (nibble >> 3) & 1,
-                    (nibble >> 2) & 1,
-                    (nibble >> 1) & 1,
-                    (nibble >> 0) & 1
-                ];
 
-                var p1 = d[0] ^ d[1] ^ d[3];
-                var p2 = d[0] ^ d[2] ^ d[3];
-                var p3 = d[1] ^ d[2] ^ d[3];
-                var p4 = p1 ^ p2 ^ p3 ^ d[0] ^ d[1] ^ d[2] ^ d[3];
-
-                var encoded = [p1, p2, d[0], p3, d[1], d[2], d[3], p4];
-                return encoded;
-            }
 
             function generatePrintableData(size) {
                 var array = new Uint8Array(size);

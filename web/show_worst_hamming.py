@@ -11,6 +11,10 @@ codewords_corrected = [
     int("1110011010111001", 2)   # RF_CODEWORD_7
 ]
 
+for i in codewords_corrected:
+    print(i)
+    
+
 # Function to compute Hamming distance between two binary numbers
 def hamming_distance(x, y):
     return bin(x ^ y).count('1')
