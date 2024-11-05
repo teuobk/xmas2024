@@ -12,7 +12,7 @@
 #define RF_SAMPLES_PER_BIT  (3)
 #define RF_SAMPLES_BIT_OFFSET  (0)
 #define RF_RAW_PAYLOAD_LEN_SAMPLES  (RF_RAW_PAYLOAD_LEN * RF_SAMPLES_PER_BIT)
-#define RF_MIN_CORR_FOR_CODEWORD_ACCEPT     (13) // based on the Hamming distance of the codewords being at worst 4
+#define RF_MIN_CORR_FOR_CODEWORD_ACCEPT     (12) // based on the Hamming distance of the codewords being at worst 6 and generally 7 or better
 #define NUM_SAMPLES_TO_AVERAGE_FOR_SLICER   (8) // must be power of 2
 
 // Don't bother looking for RF traffic if the RF level isn't very high to begin with
@@ -25,14 +25,14 @@
 // * High correlation between the first byte and the second byte (resilience to burst errors and bit flips)
 // * Limited runs of 1s and 0s, no more than 3 1s or 2 0s in a row (long runs of 0s are problematic when powering the board from RF)
 // * High Hamming distance, at least distance 4 between any two codewords (immunity to mismatches)
-#define RF_CODEWORD_0       (0b1001001110010011)
-#define RF_CODEWORD_1       (0b0100100101001001)
+#define RF_CODEWORD_0       (0b1011001010110011)
+#define RF_CODEWORD_1       (0b0100100001001010)
 #define RF_CODEWORD_2       (0b1001010110010101)
 #define RF_CODEWORD_3       (0b0101001101010011)
-#define RF_CODEWORD_4       (0b0010010100100101)
+#define RF_CODEWORD_4       (0b0010010100100100)
 #define RF_CODEWORD_5       (0b1110100111001101)
-#define RF_CODEWORD_6       (0b0010101100110111)
-#define RF_CODEWORD_7       (0b1110011010111001)
+#define RF_CODEWORD_6       (0b0010101100110010)
+#define RF_CODEWORD_7       (0b1110011010101001)
 #define RF_CODEWORD__NUM    (8)
 
 // Typedefs
