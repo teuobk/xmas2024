@@ -209,7 +209,6 @@ void system_tick_handler(void)
 {
     static bool sChargingCap = false;
     static uint8_t sRfLevel = 0;
-    bool twinkled = false;
     
     // Avoid almost all of the slower work if we've just started up, as we might
     // be in an extremely compromised power state

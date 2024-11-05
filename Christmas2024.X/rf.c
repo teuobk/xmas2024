@@ -212,8 +212,6 @@ static bool rf_command_handler(uint8_t decodedWord)
 static bool rf_frame_decode(uint64_t frameBits)
 {
     bool cmdSuccess = false;
-    bool decodeSuccess = false;
-    uint8_t decodedFrame = 0;
     
     // Extract the individual bits from the encoded byte
     // Done with ANDs of shifted literals to avoid rotations, which
@@ -324,9 +322,6 @@ void RF_sample_bit(void)
     // Sample the RF level with the comparator
     newBit = rf_read_comparator();
     
-    // Debug output
-    
-    
     // Push the new bit into the cache
     mBitCache = (uint64_t)(mBitCache << 1) | newBit;
     
@@ -337,10 +332,15 @@ void RF_sample_bit(void)
     int8_t barkerCorr = rf_compute_correlation((uint16_t)RF_BARKER_SEQ, (uint16_t)(mBitCache >> 48), 0, 1);
 
 #define BARKER_CORR_THRESH  (14) // TBD
+    // Decode only when there's a high liklihood of a packet actually being present
+    // This is for two reasons: first, to improve rejection of false-positives,
+    // and second, because actual decoding is pretty slow (hundreds of 
+    // microseconds even at Fosc = 16 MHz)
     if (barkerCorr > BARKER_CORR_THRESH)
     {
         if (rf_frame_decode(mBitCache))
         {
+            // TODO: The ACK LED doesn't always blink. Unclear why.
             LED_blink_ack();
         }        
         
