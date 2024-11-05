@@ -246,8 +246,7 @@ void system_tick_handler(void)
     }
         
     // Twinkle the LEDs, but only if we don't already have a status LED showing and only on every other tick (10 Hz)
-    if (!mpTimerExpireCallback &&
-        ((gTickCount & 1) == 0))
+    if (!mpTimerExpireCallback)
     {
         LED_twinkle();
     }

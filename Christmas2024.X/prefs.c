@@ -19,6 +19,7 @@ typedef enum
 #define EEPROM_FLAG_TREE_STAR           1
 #define EEPROM_FLAG_HARVEST_CHRG        2
 #define EEPROM_FLAG_HARVEST_BLINK       3
+#define EEPROM_FLAG_FAST_BLINKS         4
 
 // Typedefs
 
@@ -32,6 +33,7 @@ const prefs_t cDefaultPrefs =
     .treeStarEn = false,
     .harvestRailChargeEn = true,
     .harvestBlinkEn = true,
+    .fastBlinksEn = false,
     
     .magicNumber = PREFS_MAGIC_NUMBER,
     .crc = 0,
@@ -83,6 +85,7 @@ static void prefs_load(void)
     gPrefsCache.supercapChrgEn = !!(booleanFlags & (1 << EEPROM_FLAG_SUPERCAP_CHRG));
     gPrefsCache.harvestRailChargeEn = !!(booleanFlags & (1 << EEPROM_FLAG_HARVEST_CHRG));
     gPrefsCache.treeStarEn = !!(booleanFlags & (1 << EEPROM_FLAG_TREE_STAR));
+    gPrefsCache.fastBlinksEn = !!(booleanFlags & (1 << EEPROM_FLAG_FAST_BLINKS));
     
     gPrefsCache.magicNumber = mPrefsEepromBacking[EEPROM_ADDR_MAGIC];
     gPrefsCache.crc = mPrefsEepromBacking[EEPROM_ADDR_CRC];
@@ -114,18 +117,21 @@ void PREFS_update(prefs_t* pProposedSettings)
     if (pProposedSettings->harvestBlinkEn != gPrefsCache.harvestBlinkEn ||
         pProposedSettings->supercapChrgEn != gPrefsCache.supercapChrgEn ||
         pProposedSettings->harvestRailChargeEn != gPrefsCache.harvestRailChargeEn ||
-        pProposedSettings->treeStarEn != gPrefsCache.treeStarEn)
+        pProposedSettings->treeStarEn != gPrefsCache.treeStarEn ||
+        pProposedSettings->fastBlinksEn != gPrefsCache.fastBlinksEn)
     {
         gPrefsCache.harvestBlinkEn = pProposedSettings->harvestBlinkEn;
         gPrefsCache.supercapChrgEn = pProposedSettings->supercapChrgEn;
         gPrefsCache.harvestRailChargeEn = pProposedSettings->harvestRailChargeEn;
         gPrefsCache.treeStarEn = pProposedSettings->treeStarEn;
+        gPrefsCache.fastBlinksEn = pProposedSettings->fastBlinksEn;
         
         uint8_t consolidatedFlags = (uint8_t)(
                 gPrefsCache.harvestBlinkEn << EEPROM_FLAG_HARVEST_BLINK |
                 gPrefsCache.supercapChrgEn << EEPROM_FLAG_SUPERCAP_CHRG |
                 gPrefsCache.harvestRailChargeEn << EEPROM_FLAG_HARVEST_CHRG |
-                gPrefsCache.treeStarEn << EEPROM_FLAG_TREE_STAR);
+                gPrefsCache.treeStarEn << EEPROM_FLAG_TREE_STAR |
+                gPrefsCache.fastBlinksEn << EEPROM_FLAG_FAST_BLINKS);
         
         mPrefsEepromBacking[EEPROM_ADDR_FLAG] = consolidatedFlags;
     }

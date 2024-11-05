@@ -93,6 +93,13 @@ static void turnOffHarvestStoker(void)
 // Twinkle the tree LEDs
 void LED_twinkle(void)
 {   
+    // Blink only every tick for normal power, skipping the rest of this
+    if ((gTickCount & 1) != 0 && 
+            (!gPrefsCache.fastBlinksEn || gVcc < LED_BLINK_LOW_THRESH_MV))
+    {
+        return;
+    }
+    
     uint8_t randomInt = ADC_random_int();
     uint8_t remainder = ((randomInt + mLedCounter) % LED_CYCLE_LENGTH);
          

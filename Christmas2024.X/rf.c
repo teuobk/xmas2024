@@ -12,7 +12,7 @@
 #define RF_SAMPLES_PER_BIT  (3)
 #define RF_SAMPLES_BIT_OFFSET  (0)
 #define RF_RAW_PAYLOAD_LEN_SAMPLES  (RF_RAW_PAYLOAD_LEN * RF_SAMPLES_PER_BIT)
-#define RF_MIN_CORR_FOR_CODEWORD_ACCEPT     (12) // based on the Hamming distance of the codewords being at worst 6 and generally 7 or better
+#define RF_MIN_CORR_FOR_CODEWORD_ACCEPT     (12) // based on the Hamming distance of the codewords being at worst 6 and generally 7 or better -- though admittedly, I'm not sure how best to set this threshold. This value seems to work well in practice.
 #define NUM_SAMPLES_TO_AVERAGE_FOR_SLICER   (8) // must be power of 2
 
 // Don't bother looking for RF traffic if the RF level isn't very high to begin with
@@ -39,8 +39,6 @@
 
 typedef enum
 {
-    // Zero is reserved, to guard against an all-zeros packet
-            // Avoid codewords that have runs of 0s or 1s of 3 or more
     CMD_PWR_NORM = 0,
     CMD_PWR_ULTRAHIGH = 1,
 
@@ -52,9 +50,6 @@ typedef enum
             
     CMD_SELF_TEST = 6,
     CMD_UNLOCK = 7,
-            
-    // 0x0F is also reserved, to guard against an all-ones packet
-
 } rf_cmd_id_t;
 
 typedef union 
@@ -131,6 +126,7 @@ static bool rf_command_handler(uint8_t decodedWord)
             prefsTemp.blinkTimeLimit = 7; // MUST be a power of 2 minus 1
             prefsTemp.harvestBlinkEn = true;
             prefsTemp.harvestRailChargeEn = true;
+            prefsTemp.fastBlinksEn = false;
             break;
 //        case CMD_PWR_HIGH:
 //            // Time limit 3000 us, harvest LED blinks OK, drive harvest high-side
@@ -143,6 +139,7 @@ static bool rf_command_handler(uint8_t decodedWord)
             prefsTemp.blinkTimeLimit = 31; // MUST be a power of 2 minus 1
             prefsTemp.harvestBlinkEn = true;
             prefsTemp.harvestRailChargeEn = true;
+            prefsTemp.fastBlinksEn = true;
             break;
         case CMD_SUPERCAP_CHRG_DIS:
             if (mCommandUnlocked)

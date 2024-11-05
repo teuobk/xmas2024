@@ -26,6 +26,6 @@ for (i, j) in combinations(range(len(codewords_corrected)), 2):
     distances_corrected.append(((i, j), distance))
 
 # Sort by Hamming distance and get the lowest 10
-worst_10_corrected = sorted(distances_corrected, key=lambda x: x[1])[:10]
+worst_10_corrected = sorted(distances_corrected, key=lambda x: x[1])[:30]
 for x in worst_10_corrected:
     print(x)

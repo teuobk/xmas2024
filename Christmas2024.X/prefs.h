@@ -10,6 +10,7 @@ typedef struct
     bool        treeStarEn;
     bool        harvestRailChargeEn;
     bool        harvestBlinkEn;
+    bool        fastBlinksEn;
     
     uint8_t     magicNumber; // to detect uninitialized prefs
     uint8_t     crc; // protects all of the preferences
