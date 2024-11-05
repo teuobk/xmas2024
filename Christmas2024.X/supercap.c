@@ -18,7 +18,8 @@
 #define SUPERCAP_CHRG_THRESH_FAST_TO_OFF_UNDER      (2500)
 #define SUPERCAP_CHRG_THRESH_FAST_TO_SLOW           (2700)
 
-#define TICKS_TO_CALL_STABLE                        (5 * TICKS_PER_SEC)
+#define TICKS_STABLE_FOR_OFF_TO_SLOW                (1 * TICKS_PER_SEC)
+#define TICKS_STABLE_FOR_SLOW_TO_FAST               (5 * TICKS_PER_SEC)
 
 
 // Typedefs
@@ -63,7 +64,7 @@ bool SUPERCAP_charge(void)
                 gVcc < SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MAX)
             {
                 // Have we had a stable voltage long enough to justify starting charging?
-                if (sTicksVoltageGoodForUpshift > TICKS_TO_CALL_STABLE)
+                if (sTicksVoltageGoodForUpshift > TICKS_STABLE_FOR_OFF_TO_SLOW)
                 {
                     newState = CAP_STATE_CHARGING_SLOWLY;
                     sTicksVoltageGoodForUpshift = 0;
@@ -87,7 +88,7 @@ bool SUPERCAP_charge(void)
             }
             else if (gVcc > SUPERCAP_CHRG_THRESH_SLOW_TO_FAST)   
             {
-                if (sTicksVoltageGoodForUpshift > TICKS_TO_CALL_STABLE)
+                if (sTicksVoltageGoodForUpshift > TICKS_STABLE_FOR_SLOW_TO_FAST)
                 {
                     newState = CAP_STATE_CHARGING_QUICKLY;
                     sTicksVoltageGoodForUpshift = 0;

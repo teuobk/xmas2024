@@ -7,7 +7,7 @@
 
 // Macros and constants
 
-#define RF_BARKER_SEQ     (0b1111111000000111UL)  // 11001 raw
+#define RF_BARKER_SEQ     (0b1000111000000111UL)  // 01001 raw, with a prepended 1
 #define RF_NET_PAYLOAD_LEN_INC_ECC (8) // for an 8,4 Hamming code
 #define RF_SAMPLES_PER_BIT  (6)
 #define RF_RAW_PAYLOAD_LEN_SAMPLES  (RF_NET_PAYLOAD_LEN_INC_ECC * RF_SAMPLES_PER_BIT) // for Manchester coding
@@ -16,6 +16,18 @@
 
 // Don't bother looking for RF traffic if the RF level isn't very high to begin with
 #define RF_LEVEL_MIN_FOR_COMMS_COUNTS       (32)
+
+
+// Command codewords
+#define RF_CODEWORD_0       (0b1001001110010011)
+#define RF_CODEWORD_1       (0b0100100101001001)
+#define RF_CODEWORD_2       (0b1001010110010101)
+#define RF_CODEWORD_3       (0b0101001101010011)
+#define RF_CODEWORD_4       (0b0010010100100101)
+#define RF_CODEWORD_5       (0b1110100111001101)
+#define RF_CODEWORD_6       (0b0010101100110111)
+#define RF_CODEWORD_7       (0b1110011010111001)
+
 
 // Typedefs
 
@@ -161,31 +173,31 @@ static bool rf_frame_decode_hamming(uint64_t frameBits)
     
     uint8_t p2a = !!(frameBits & (1ULL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
     uint8_t p2b = !!(frameBits & (1ULL << (6*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p2 = p2b & !p2a;
+    uint8_t p2 = p2b;// & !p2a;
     
     uint8_t d1a = !!(frameBits & (1ULL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
     uint8_t d1b = !!(frameBits & (1ULL << (5*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d1 = d1b & !d1a;
+    uint8_t d1 = d1b;// & !d1a;
     
     uint8_t p3a = !!(frameBits & (1ULL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
     uint8_t p3b = !!(frameBits & (1ULL << (4*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p3 = p3b & !p3a;
+    uint8_t p3 = p3b;// & !p3a;
     
     uint8_t d2a = !!(frameBits & (1ULL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
     uint8_t d2b = !!(frameBits & (1ULL << (3*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d2 = d2b & !d2a;
+    uint8_t d2 = d2b;// & !d2a;
     
     uint8_t d3a = !!(frameBits & (1ULL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
     uint8_t d3b = !!(frameBits & (1ULL << (2*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d3 = d3b & !d3a;
+    uint8_t d3 = d3b;// & !d3a;
     
     uint8_t d4a = !!(frameBits & (1ULL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
     uint8_t d4b = !!(frameBits & (1ULL << (1*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t d4 = d4b & !d4a;
+    uint8_t d4 = d4b;// & !d4a;
     
     uint8_t p4a = !!(frameBits & (1ULL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_PER_BIT/2+RF_SAMPLES_BIT_OFFSET))); 
     uint8_t p4b = !!(frameBits & (1ULL << (0*RF_SAMPLES_PER_BIT+RF_SAMPLES_BIT_OFFSET))); 
-    uint8_t p4 = p4b & !p4a;
+    uint8_t p4 = p4b;// & !p4a;
 
     // Calculate the syndrome using parity checks
     uint8_t s1 = p1 ^ d1 ^ d2 ^ d4;   // 2**0
