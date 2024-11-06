@@ -18,8 +18,9 @@
 #define SUPERCAP_CHRG_THRESH_FAST_TO_OFF_UNDER      (2500)
 #define SUPERCAP_CHRG_THRESH_FAST_TO_SLOW           (2700)
 
-#define TICKS_STABLE_FOR_OFF_TO_SLOW                (4 * TICKS_PER_SEC) // must be longer than one RF packet
-#define TICKS_STABLE_FOR_SLOW_TO_FAST               (5 * TICKS_PER_SEC) // must also be longer than one RF packet
+#define TICKS_BOOTUP_TO_OFF                         (2 * TICKS_PER_SEC) // Should be longer than the LED-only run time 
+#define TICKS_STABLE_FOR_OFF_TO_SLOW                (TICKS_PER_SEC/2)
+#define TICKS_STABLE_FOR_SLOW_TO_FAST               (4 * TICKS_PER_SEC) // should be longer than one RF packet
 
 
 // Typedefs
@@ -54,7 +55,7 @@ bool SUPERCAP_charge(void)
     switch (mCapStateMachineState)
     {
         case CAP_STATE_BOOTUP:
-            if (gTickCount > (2 * TICKS_PER_SEC))
+            if (gTickCount > TICKS_BOOTUP_TO_OFF)
             {
                 newState = CAP_STATE_CHARGING_OFF;
             }
