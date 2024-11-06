@@ -7,17 +7,35 @@
 
 // Macros and constants
 
-#define RF_BARKER_SEQ     (0b1111111000000111UL)  // 11001 raw, with a prepended 1
-#define RF_RAW_PAYLOAD_LEN (16)
-#define RF_SAMPLES_PER_BIT  (3)
-#define RF_SAMPLES_BIT_OFFSET  (0)
+// Barker sequence to detect the start of a frame
+// 11001 raw, with a prepended 1 and postpended extra 1 since we'll have been low for two bit periods
+#define RF_BARKER_SEQ               (0b1111111000000111UL)  
+
+#define RF_RAW_PAYLOAD_LEN          (16)
+#define RF_SAMPLES_PER_BIT          (3)
+#define RF_SAMPLES_BIT_OFFSET       (0)
 #define RF_RAW_PAYLOAD_LEN_SAMPLES  (RF_RAW_PAYLOAD_LEN * RF_SAMPLES_PER_BIT)
-#define RF_MIN_CORR_FOR_CODEWORD_ACCEPT     (12) // based on the Hamming distance of the codewords being at worst 6 and generally 7 or better -- though admittedly, I'm not sure how best to set this threshold. This value seems to work well in practice.
+
 #define NUM_SAMPLES_TO_AVERAGE_FOR_SLICER   (8) // must be power of 2
 
 // Don't bother looking for RF traffic if the RF level isn't very high to begin with
 #define RF_LEVEL_MIN_FOR_COMMS_COUNTS       (32)
 
+// Correlation threshold for the preamble to be considered a match. Note that
+// this is interpretted on a per-sample basis, not a per-bit basis, as we
+// want to use this Barker code 
+#define BARKER_CORR_THRESH          (14)
+
+// Correlation threshold for the data word. This is based on the bits
+// in the 16-bit data word (encoded), which currently has 8 valid codewords (3 bits net).
+// This was chosen based on the Hamming distance of the codewords being at worst 
+// 6 and generally 7 or better -- though admittedly, I'm not sure how best to 
+// set this threshold. It was empirically tuned to avoid false-positives without
+// causing too many communication challenges. One must remember that this is 
+// the threshold between a decode and a no-decode, not some sort of threshold between
+// codewords, so even a frame that exceeds this threshold for correlation with
+// one of the codewords still may or may not be decoded properly
+#define RF_MIN_CORR_FOR_CODEWORD_ACCEPT     (10) 
 
 // Command codewords
 // These were chosen to have:
@@ -26,12 +44,12 @@
 // * Limited runs of 1s and 0s, no more than 3 1s or 2 0s in a row (long runs of 0s are problematic when powering the board from RF)
 // * High Hamming distance, at least distance 4 between any two codewords (immunity to mismatches)
 #define RF_CODEWORD_0       (0b1011001010110011)
-#define RF_CODEWORD_1       (0b0100100001001010)
+#define RF_CODEWORD_1       (0b0100101001001010)
 #define RF_CODEWORD_2       (0b1001010110010101)
 #define RF_CODEWORD_3       (0b0101001101010011)
-#define RF_CODEWORD_4       (0b0010010100100100)
+#define RF_CODEWORD_4       (0b0010010100100110)
 #define RF_CODEWORD_5       (0b1110100111001101)
-#define RF_CODEWORD_6       (0b0010101100110010)
+#define RF_CODEWORD_6       (0b0110101100110100)
 #define RF_CODEWORD_7       (0b1110011010101001)
 #define RF_CODEWORD__NUM    (8)
 
@@ -82,7 +100,7 @@ static bool mCommandUnlocked = false;
 
 // Implementations
 
-// Compute the correlation between a and b, with 0s interpreted as -1s, using
+// Compute the correlation between a and b, with matches given the value +1 per bit and mismatches +0 per bit, using
 // the given number of bytes for the calculation (counted from the LSB)
 static int8_t rf_compute_correlation(uint16_t a, uint16_t b, uint8_t startByte, uint8_t endByte)
 {
@@ -331,7 +349,6 @@ void RF_sample_bit(void)
     // Compute the correlation with the Barker code indicating the start of the frame
     int8_t barkerCorr = rf_compute_correlation((uint16_t)RF_BARKER_SEQ, (uint16_t)(mBitCache >> 48), 0, 1);
 
-#define BARKER_CORR_THRESH  (14) // TBD
     // Decode only when there's a high liklihood of a packet actually being present
     // This is for two reasons: first, to improve rejection of false-positives,
     // and second, because actual decoding is pretty slow (hundreds of 
