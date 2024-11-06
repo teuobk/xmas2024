@@ -11,7 +11,7 @@
 #define RF_LVL_LED_PIN          (1)
 #define HARVEST_STOKE_PIN       (3)
 
-#define RF_ACK_BLINK_DURATION   (7) 
+#define RF_ACK_BLINK_DURATION   (15) 
 #define RF_LVL_BLINK_DURATION   (3)
 
 #define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   7 // MUST per a power of 2 - 1
