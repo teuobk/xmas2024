@@ -20,11 +20,8 @@ uint16_t gVcc = 0;
 // Takes about 400 us when Fosc=16MHz, almost entirely due to the division for conversion to millivolts
 uint16_t ADC_read_vcc(void)
 {
-    // Constant for computing VCC in millivolts from an 8-bit ADC conversion 
-    // of the 1024 mV FVR with VDD as positive reference
-    #define VCC_MV_FROM_FVR_EIGHT_BIT ((uint32_t)1024 * 255)
-
     uint16_t mv = 0;
+    DEBUG_SET();
     
     // Set ADC clock to internal (FRC), results left-justified
     ADCON0 = 0b00010000;
@@ -55,8 +52,11 @@ uint16_t ADC_read_vcc(void)
     // Turn off FVR and buffer
     FVRCON = 0b00000000;
     
-    // Convert the value into millivolts
-    mv = (uint16_t)(VCC_MV_FROM_FVR_EIGHT_BIT/ADRESH);
+    // Convert the value into millivolts. Note that this isn't exactly 
+    // optimal; however, it's done this way to avoid a lengthy 32-bit
+    // divide, instead reducing the problem to a 16-bit divide followed by two left-rotates
+    mv = (uint16_t)(65535u/ADRESH*4u); // this nets roughly 1024*255/ADRESH in a lot fewer cycles
+    DEBUG_CLEAR();
     
     return mv;
 }
