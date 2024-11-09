@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include "prefs.h"
 #include "global.h"
+#include "supercap.h"
 
 // Macros and constants
 
@@ -106,6 +107,10 @@ static uint8_t prefs_calc_crc(uint8_t *data, uint8_t length)
 // Write to the PIC16's internal EEPROM the specified value at the specified address
 void PREFS_update(prefs_t* pProposedSettings)
 {
+    // Force supercap charging to stop temporarily, as writing EEPROM takes a
+    // while and requires a lot of power
+    SUPERCAP_force_charging_off();
+    
     // WARNING: This is all slow!
     if (pProposedSettings->blinkTimeLimit != gPrefsCache.blinkTimeLimit)
     {

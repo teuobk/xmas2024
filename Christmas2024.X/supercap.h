@@ -4,5 +4,6 @@
 #include "global.h"
 
 bool SUPERCAP_charge(void);
+void SUPERCAP_force_charging_off(void);
 
 #endif

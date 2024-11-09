@@ -41,8 +41,16 @@ static uint32_t mTicksAtStateEntry = 0;
 
 static bool mLastCharging = false;
 
+static bool mForceChargingStop = false;
+
 // Implementations
 
+// Force supercap charging to stop temporarily
+void SUPERCAP_force_charging_off(void)
+{
+    mForceChargingStop = true;
+    SUPERCAP_charge();
+}
 
 // Update the state machine. Returns true if charging in any way, false otherwise
 bool SUPERCAP_charge(void)
@@ -83,7 +91,8 @@ bool SUPERCAP_charge(void)
             break;
         case CAP_STATE_CHARGING_SLOWLY:
             if (gVcc < SUPERCAP_CHRG_THRESH_SLOW_TO_OFF_UNDER ||
-                gVcc > SUPERCAP_CHRG_THRESH_SLOW_TO_OFF_OVER)
+                gVcc > SUPERCAP_CHRG_THRESH_SLOW_TO_OFF_OVER ||
+                mForceChargingStop)
             {
                 newState = CAP_STATE_CHARGING_OFF;
             }
@@ -106,7 +115,8 @@ bool SUPERCAP_charge(void)
             break;
         case CAP_STATE_CHARGING_QUICKLY:
             if (gVcc > SUPERCAP_CHRG_THRESH_FAST_TO_OFF_OVER ||
-                gVcc < SUPERCAP_CHRG_THRESH_FAST_TO_OFF_UNDER)
+                gVcc < SUPERCAP_CHRG_THRESH_FAST_TO_OFF_UNDER ||
+                mForceChargingStop)
             {
                 newState = CAP_STATE_CHARGING_OFF;
             }
@@ -159,6 +169,11 @@ bool SUPERCAP_charge(void)
         mTicksAtStateEntry = gTickCount;
         mCapStateMachineState = newState;
     }
+    
+    isCharging = (mCapStateMachineState == CAP_STATE_CHARGING_SLOWLY ||
+                  mCapStateMachineState == CAP_STATE_CHARGING_QUICKLY);
+    
+    mForceChargingStop = false;
                 
     return isCharging;
 }
