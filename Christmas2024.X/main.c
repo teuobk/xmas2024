@@ -314,7 +314,6 @@ void main(void)
     {
         if (mUnhandledSystemTick)
         {   
-            DEBUG_SET();
             mUnhandledSystemTick = false;
             
             // Enable BOR detection temporarily. Should respond within 2 us
@@ -331,8 +330,6 @@ void main(void)
             BORCON = 0x00; // Enable BOR detection temporarily
             
             switchSystemClock(false);
-            DEBUG_CLEAR();
-
         }
 
         // Wait for next interrupt

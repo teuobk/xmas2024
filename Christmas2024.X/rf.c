@@ -8,8 +8,10 @@
 // Macros and constants
 
 // Barker sequence to detect the start of a frame
-// 11001 raw, with a prepended 1 and postpended extra 1 since we'll have been low for two bit periods
-#define RF_BARKER_SEQ               (0b1111111000000111UL)  
+// Note that Samsung phones will drop out for about 3-4 samples every 5 or so samples
+//#define RF_BARKER_SEQ               (0b1111111000000111UL)  // 11001 raw (sort of a slow version of 2-Barker)
+//#define RF_BARKER_SEQ               (0b0000111111000111UL)  // 01101 raw (soft of 4-Barker with a leading 0 sample)
+#define RF_BARKER_SEQ               (0xFFE00FC7UL)  // (Ignore MSB)
 
 #define RF_RAW_PAYLOAD_LEN          (16)
 #define RF_SAMPLES_PER_BIT          (3)
@@ -23,8 +25,8 @@
 
 // Correlation threshold for the preamble to be considered a match. Note that
 // this is interpretted on a per-sample basis, not a per-bit basis, as we
-// want to use this Barker code 
-#define BARKER_CORR_THRESH          (14)
+// want to use this Barker code for clock sync
+#define BARKER_CORR_THRESH          (26) // of 32 samples in the sequence
 
 // Correlation threshold for the data word. This is based on the bits
 // in the 16-bit data word (encoded), which currently has 8 valid codewords (3 bits net).
@@ -72,8 +74,8 @@ typedef enum
 
 typedef union 
 {
-    uint16_t    word;
-    uint8_t     bytes[sizeof(uint16_t)];
+    uint32_t    word;
+    uint8_t     bytes[sizeof(uint32_t)];
 } bytewise_16_t;
 
 // Variables
@@ -95,6 +97,8 @@ static uint8_t mRfLevelIndex = 0;
 static uint8_t mRfLevelAverage = 0;
 static uint8_t mRfLevelPeak = 0;
 static uint64_t mBitCache = 0;
+
+static uint32_t mBarkerBitCache = 0;
     
 static bool mCommandUnlocked = false;
 
@@ -102,7 +106,7 @@ static bool mCommandUnlocked = false;
 
 // Compute the correlation between a and b, with matches given the value +1 per bit and mismatches +0 per bit, using
 // the given number of bytes for the calculation (counted from the LSB)
-static int8_t rf_compute_correlation(uint16_t a, uint16_t b, uint8_t startByte, uint8_t endByte)
+static int8_t rf_compute_correlation(uint32_t a, uint32_t b, uint8_t startByte, uint8_t endByte)
 {
     int8_t corr = 0;
     bytewise_16_t pA;
@@ -343,12 +347,15 @@ void RF_sample_bit(void)
     // Push the new bit into the cache
     mBitCache = (uint64_t)(mBitCache << 1) | newBit;
     
+    bool bitShiftedOffLeft = !!(mBitCache & (1ULL << 48));
+    mBarkerBitCache = (uint32_t)(mBarkerBitCache << 1) | bitShiftedOffLeft;
+    
     // Whenever the bit pattern shows a start sequence in a position consistent
     // with having received a full frame, attempt to decode the frame. 
 
     // Compute the correlation with the Barker code indicating the start of the frame
-    int8_t barkerCorr = rf_compute_correlation((uint16_t)RF_BARKER_SEQ, (uint16_t)(mBitCache >> 48), 0, 1);
-
+    int8_t barkerCorr = rf_compute_correlation(RF_BARKER_SEQ, mBarkerBitCache, 0, 3);
+    
     // Decode only when there's a high liklihood of a packet actually being present
     // This is for two reasons: first, to improve rejection of false-positives,
     // and second, because actual decoding is pretty slow (hundreds of 
@@ -364,6 +371,7 @@ void RF_sample_bit(void)
         // Clear the cache to prevent duplicates, since some packets can look a bit like
         // another Barker start sequence
         mBitCache = 0;
+        mBarkerBitCache = 0;
     }
 }
 
