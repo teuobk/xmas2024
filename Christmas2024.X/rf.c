@@ -43,7 +43,7 @@
 // * Low autocorrelation with +/- 1 bit timing shifts (resistance to false-positives due to timing errors)
 // * High correlation between the first byte and the second byte (resilience to burst errors and bit flips)
 // * Limited runs of 1s and 0s, no more than 3 1s or 2 0s in a row (long runs of 0s are problematic when powering the board from RF)
-// * High Hamming distance, at least distance 4 between any two codewords (immunity to mismatches)
+// * High Hamming distance, at least distance 6 and usually 7+ between any two codewords (immunity to mismatches)
 #define RF_CODEWORD_0       (0b1011001010110011)
 #define RF_CODEWORD_1       (0b0100101001001010)
 #define RF_CODEWORD_2       (0b1001010110010101)
@@ -369,7 +369,6 @@ void RF_sample_bit(void)
     {
         if (rf_frame_decode(mBitCache))
         {
-            // TODO: The ACK LED doesn't always blink. Unclear why.
             LED_blink_ack();
         }        
         
