@@ -21,7 +21,6 @@ uint16_t gVcc = 0;
 uint16_t ADC_read_vcc(void)
 {
     uint16_t mv = 0;
-    DEBUG_SET();
     
     // Set ADC clock to internal (FRC), results left-justified
     ADCON0 = 0b00010000;
@@ -56,7 +55,6 @@ uint16_t ADC_read_vcc(void)
     // optimal; however, it's done this way to avoid a lengthy 32-bit
     // divide, instead reducing the problem to a 16-bit divide followed by two left-rotates
     mv = (uint16_t)(65535u/ADRESH*4u); // this nets roughly 1024*255/ADRESH in a lot fewer cycles
-    DEBUG_CLEAR();
     
     return mv;
 }

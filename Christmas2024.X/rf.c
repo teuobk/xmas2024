@@ -8,10 +8,9 @@
 // Macros and constants
 
 // Barker sequence to detect the start of a frame
-// Note that Samsung phones will drop out for about 3-4 samples every 5 or so samples
 //#define RF_BARKER_SEQ               (0b1111111000000111UL)  // 11001 raw (sort of a slow version of 2-Barker)
 //#define RF_BARKER_SEQ               (0b0000111111000111UL)  // 01101 raw (soft of 4-Barker with a leading 0 sample)
-#define RF_BARKER_SEQ               (0xFFE00FC7UL)  // (Ignore MSB)
+#define RF_BARKER_SEQ               (0xFFE00FC7UL)  // (Basically 7-Barker)
 
 #define RF_RAW_PAYLOAD_LEN          (16)
 #define RF_SAMPLES_PER_BIT          (3)
@@ -26,7 +25,7 @@
 // Correlation threshold for the preamble to be considered a match. Note that
 // this is interpretted on a per-sample basis, not a per-bit basis, as we
 // want to use this Barker code for clock sync
-#define BARKER_CORR_THRESH          (26) // of 32 samples in the sequence
+#define BARKER_CORR_THRESH          (26) // of 32 samples in the sequence (e.g., 26 means 2 bits of mismatch))
 
 // Correlation threshold for the data word. This is based on the bits
 // in the 16-bit data word (encoded), which currently has 8 valid codewords (3 bits net).
@@ -230,11 +229,11 @@ static bool rf_command_handler(uint8_t decodedWord)
 }
 
 
-
+// Frame decoding takes about 400 us
 static bool rf_frame_decode(uint64_t frameBits)
 {
     bool cmdSuccess = false;
-    
+
     // Extract the individual bits from the encoded byte
     // Done with ANDs of shifted literals to avoid rotations, which
     // must be done iteratively (one place at a time) on this architecture.
@@ -269,6 +268,12 @@ static bool rf_frame_decode(uint64_t frameBits)
     uint8_t codewordWithHighestCorr = RF_CODEWORD__NUM;
     for (uint8_t i = 0; i < RF_CODEWORD__NUM; i++)
     {
+        // Skip some codes we don't actually want to support right now
+        if (i == CMD_SUPERCAP_CHRG_DIS || i == CMD_SUPERCAP_CHRG_EN)
+        {
+            continue;
+        }
+        
         int8_t corr = rf_compute_correlation(reconstructed, cCodewords[i], 0, 1);
         if (corr > highestCorrelation)
         {
@@ -276,7 +281,7 @@ static bool rf_frame_decode(uint64_t frameBits)
             codewordWithHighestCorr = i;
         }
     }
-    
+
     if (highestCorrelation >= RF_MIN_CORR_FOR_CODEWORD_ACCEPT)
     {
         cmdSuccess = rf_command_handler(codewordWithHighestCorr);

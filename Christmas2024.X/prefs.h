@@ -3,17 +3,15 @@
 
 #include "global.h"
 
-typedef struct
+typedef struct  
 {
     uint8_t     blinkTimeLimit;
+    
     bool        supercapChrgEn;
     bool        treeStarEn;
     bool        harvestRailChargeEn;
     bool        harvestBlinkEn;
     bool        fastBlinksEn;
-    
-    uint8_t     magicNumber; // to detect uninitialized prefs
-    uint8_t     crc; // protects all of the preferences
 } prefs_t;
 
 

@@ -35,9 +35,6 @@ const prefs_t cDefaultPrefs =
     .harvestRailChargeEn = true,
     .harvestBlinkEn = true,
     .fastBlinksEn = false,
-    
-    .magicNumber = PREFS_MAGIC_NUMBER,
-    .crc = 0,
 };
 
 // CRC8 table for polynomial 0xEB, chosen because it has Hamming distance 5 for lengths up to 9 bytes
@@ -77,81 +74,107 @@ prefs_t gPrefsCache;
 // Load the cache directly from EEPROM
 static void prefs_load(void)
 {
-    // Need to do this element by element
-    gPrefsCache.blinkTimeLimit = mPrefsEepromBacking[EEPROM_ADDR_BLINK_TIME];
+    uint8_t onesCount = 0;
+    
+    uint8_t blinkConfigRaw = mPrefsEepromBacking[EEPROM_ADDR_BLINK_TIME];
+    
+    onesCount = cSetBitsInByte[blinkConfigRaw];
+    
+    // We want odd parity
+    if (onesCount & 1)
+    {
+        // Valid parity, so load the values
+        gPrefsCache.blinkTimeLimit = blinkConfigRaw >> 2;
+        gPrefsCache.fastBlinksEn = (blinkConfigRaw >> 1) & 1;
+    }
+    else
+    {
+        // Invalid parity, so use defaults
+        gPrefsCache.blinkTimeLimit = cDefaultPrefs.blinkTimeLimit;
+        gPrefsCache.fastBlinksEn = cDefaultPrefs.fastBlinksEn;
+    }
     
     uint8_t booleanFlags = mPrefsEepromBacking[EEPROM_ADDR_FLAG];
     
-    gPrefsCache.harvestBlinkEn = !!(booleanFlags & (1 << EEPROM_FLAG_HARVEST_BLINK));
-    gPrefsCache.supercapChrgEn = !!(booleanFlags & (1 << EEPROM_FLAG_SUPERCAP_CHRG));
-    gPrefsCache.harvestRailChargeEn = !!(booleanFlags & (1 << EEPROM_FLAG_HARVEST_CHRG));
-    gPrefsCache.treeStarEn = !!(booleanFlags & (1 << EEPROM_FLAG_TREE_STAR));
-    gPrefsCache.fastBlinksEn = !!(booleanFlags & (1 << EEPROM_FLAG_FAST_BLINKS));
+    onesCount = cSetBitsInByte[booleanFlags];
     
-    gPrefsCache.magicNumber = mPrefsEepromBacking[EEPROM_ADDR_MAGIC];
-    gPrefsCache.crc = mPrefsEepromBacking[EEPROM_ADDR_CRC];
-}
-
-static uint8_t prefs_calc_crc(uint8_t *data, uint8_t length) 
-{
-    uint8_t crc = 0;
-    
-    for (uint8_t i = 0; i < length; i++) 
+    // We want odd parity
+    if (onesCount & 1)
     {
-        crc = crc8_table[crc ^ data[i]];
+        // Valid parity, so load the values
+        gPrefsCache.harvestBlinkEn = !!(booleanFlags & (1 << (EEPROM_FLAG_HARVEST_BLINK + 1)));
+        gPrefsCache.supercapChrgEn = !!(booleanFlags & (1 << (EEPROM_FLAG_SUPERCAP_CHRG + 1)));
+        gPrefsCache.harvestRailChargeEn = !!(booleanFlags & (1 << (EEPROM_FLAG_HARVEST_CHRG + 1)));
+        gPrefsCache.treeStarEn = !!(booleanFlags & (1 << (EEPROM_FLAG_TREE_STAR + 1)));
     }
-    
-    return crc;
+    else
+    {
+        // Invalid parity, so use defaults
+        gPrefsCache.harvestBlinkEn = cDefaultPrefs.harvestBlinkEn;
+        gPrefsCache.supercapChrgEn = cDefaultPrefs.supercapChrgEn;
+        gPrefsCache.harvestRailChargeEn = cDefaultPrefs.harvestRailChargeEn;
+        gPrefsCache.treeStarEn = cDefaultPrefs.treeStarEn;
+    }
 }
 
-// Write to the PIC16's internal EEPROM the specified value at the specified address
+//static uint8_t prefs_calc_crc(uint8_t *data, uint8_t length) 
+//{
+//    uint8_t crc = 0;
+//    
+//    for (uint8_t i = 0; i < length; i++) 
+//    {
+//        crc = crc8_table[crc ^ data[i]];
+//    }
+//    
+//    return crc;
+//}
+
+// Write to the PIC16's internal EEPROM the specified value at the specified address. Try 
+// to limit the writes for particular commands to a single byte
 void PREFS_update(prefs_t* pProposedSettings)
 {
     // Force supercap charging to stop temporarily, as writing EEPROM takes a
-    // while and requires a lot of power
+    // while and requires a lot of power. Writing one byte takes about 3 ms.
     SUPERCAP_force_charging_off();
     
-    // WARNING: This is all slow!
-    if (pProposedSettings->blinkTimeLimit != gPrefsCache.blinkTimeLimit)
+    // WARNING: Writes are very slow, about 2ms per byte!
+    if (pProposedSettings->blinkTimeLimit != gPrefsCache.blinkTimeLimit ||
+        pProposedSettings->fastBlinksEn != gPrefsCache.fastBlinksEn)
     {
+        // No bounding checks here
         gPrefsCache.blinkTimeLimit = pProposedSettings->blinkTimeLimit;
+        gPrefsCache.fastBlinksEn = pProposedSettings->fastBlinksEn;
         
-        mPrefsEepromBacking[EEPROM_ADDR_BLINK_TIME] = gPrefsCache.blinkTimeLimit;
+        uint8_t writeValue = (uint8_t)(gPrefsCache.blinkTimeLimit << 1) | (gPrefsCache.fastBlinksEn & 1);
+        
+        uint8_t onesCount = cSetBitsInByte[writeValue];
+        
+        // Odd parity
+        uint8_t parity = (onesCount & 1) ? 0 : 1;
+        
+        mPrefsEepromBacking[EEPROM_ADDR_BLINK_TIME] = (uint8_t)(writeValue << 1) | (parity & 1); 
     }
     
     if (pProposedSettings->harvestBlinkEn != gPrefsCache.harvestBlinkEn ||
         pProposedSettings->supercapChrgEn != gPrefsCache.supercapChrgEn ||
         pProposedSettings->harvestRailChargeEn != gPrefsCache.harvestRailChargeEn ||
-        pProposedSettings->treeStarEn != gPrefsCache.treeStarEn ||
-        pProposedSettings->fastBlinksEn != gPrefsCache.fastBlinksEn)
+        pProposedSettings->treeStarEn != gPrefsCache.treeStarEn)
     {
         gPrefsCache.harvestBlinkEn = pProposedSettings->harvestBlinkEn;
         gPrefsCache.supercapChrgEn = pProposedSettings->supercapChrgEn;
         gPrefsCache.harvestRailChargeEn = pProposedSettings->harvestRailChargeEn;
         gPrefsCache.treeStarEn = pProposedSettings->treeStarEn;
-        gPrefsCache.fastBlinksEn = pProposedSettings->fastBlinksEn;
         
         uint8_t consolidatedFlags = (uint8_t)(
                 gPrefsCache.harvestBlinkEn << EEPROM_FLAG_HARVEST_BLINK |
                 gPrefsCache.supercapChrgEn << EEPROM_FLAG_SUPERCAP_CHRG |
                 gPrefsCache.harvestRailChargeEn << EEPROM_FLAG_HARVEST_CHRG |
-                gPrefsCache.treeStarEn << EEPROM_FLAG_TREE_STAR |
-                gPrefsCache.fastBlinksEn << EEPROM_FLAG_FAST_BLINKS);
+                gPrefsCache.treeStarEn << EEPROM_FLAG_TREE_STAR);
         
-        mPrefsEepromBacking[EEPROM_ADDR_FLAG] = consolidatedFlags;
-    }
+        // Odd parity
+        uint8_t parity = (cSetBitsInByte[consolidatedFlags] & 1) ? 0 : 1;
         
-    if (PREFS_MAGIC_NUMBER != gPrefsCache.magicNumber)
-    {
-        gPrefsCache.magicNumber = PREFS_MAGIC_NUMBER;
-        mPrefsEepromBacking[EEPROM_ADDR_MAGIC] = PREFS_MAGIC_NUMBER;
-    }
-    
-    uint8_t newCrc = prefs_calc_crc((uint8_t*)&gPrefsCache, offsetof(prefs_t, crc));
-    if (newCrc != gPrefsCache.crc)
-    {
-        gPrefsCache.crc = newCrc;
-        mPrefsEepromBacking[EEPROM_ADDR_CRC] = newCrc;
+        mPrefsEepromBacking[EEPROM_ADDR_FLAG] = (uint8_t)(consolidatedFlags << 1) | (parity & 1);
     }
 }
 
@@ -160,12 +183,4 @@ void PREFS_update(prefs_t* pProposedSettings)
 void PREFS_init(void)
 {
     prefs_load();
-    uint8_t expectedCrc = prefs_calc_crc((uint8_t*)&gPrefsCache, offsetof(prefs_t, crc));
-    
-    // Detect uninitialized or corrupted prefs, and replace them with defaults
-    if (gPrefsCache.magicNumber != PREFS_MAGIC_NUMBER ||
-        gPrefsCache.crc != expectedCrc)
-    {
-        PREFS_update((prefs_t*)&cDefaultPrefs);
-    }            
 }
