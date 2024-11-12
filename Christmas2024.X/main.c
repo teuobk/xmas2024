@@ -69,8 +69,8 @@ void setup(void)
     PORTA = 0;
     
     // Digital *OUTPUT* driver connection (default = 1 = push-pull driver disconnected)
-    TRISC = /* Push-pull outputs */ (uint8_t)~(KEEP_ON_PIN | LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2 | DEBUG_PIN) |
-            /* Inputs or Weak pull-up output*/ (uint8_t)(SUPERCAP_MONITOR_PIN | SUPERCAP_MED_CHRG_PIN | LED_STOKER_PIN);
+    TRISC = /* Push-pull outputs */ (uint8_t)~(KEEP_ON_PIN | DEBUG_PIN) |
+            /* Inputs or Weak pull-up output*/ (uint8_t)(SUPERCAP_MONITOR_PIN | SUPERCAP_MED_CHRG_PIN | LED_STOKER_PIN | LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2);
     TRISB = 0b11000000; // All port B outputs except programming pins
     TRISA = 0b00000001; // All outputs except RA0
     
@@ -84,6 +84,9 @@ void setup(void)
     SLRCONC = 0xFF; // limit all PORTC
     SLRCONB = 0xFF; // limit all PORTB
     SLRCONA = 0xFF; // limit all PORTA
+    
+    // Weak pull-ups all off (should be automatic?)
+    
     
     //
     // Timers
@@ -296,7 +299,7 @@ void main(void)
     RB5PPS = 0x1A; // Export to pin RB5 (pin 26))
     CLKRCONbits.CLKREN = 1; // enable clock output
 #endif
-
+            
     // Cache load
     PREFS_init();
 
@@ -305,7 +308,7 @@ void main(void)
 
     // Service the system tick immediately
     mUnhandledSystemTick = true;
-    
+            
     // Enable systick
     T0EN = 1;
         
@@ -327,7 +330,12 @@ void main(void)
             gTickCount++;
             
             // Disable BOR detection to save power (consumes 9 uA when active)
-            BORCON = 0x00; // Enable BOR detection temporarily
+            // ***UNLESS** we have something like a long-running power-hungry process going,
+            // in which case we'll disable BOR detection later
+            if (!mpTimerExpireCallback)
+            {
+                BORCON = 0x00; // Disable BOR detection
+            }
             
             switchSystemClock(false);
         }
@@ -366,7 +374,8 @@ void __interrupt() isr(void)
             mpTimerExpireCallback();
             mpTimerExpireCallback = NULL;        
             TMR6ON = false;
-            switchSystemClock(false);
+            BORCON = 0x00; // Disable BOR detection
+            switchSystemClock(false);            
         }
     }
  

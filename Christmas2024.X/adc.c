@@ -65,7 +65,8 @@ uint8_t ADC_read_vcc_fast(void)
 {
     // Set ADC clock to Fosc (so that we get a noisy result and don't have to turn on another oscillator),
     // results right-justified (we want the noisy bits), and turn the module on
-    ADCON0 = 0b10000100;
+//    ADCON0 = 0b10000100;
+    ADCON0 = 0b10010100; // Frc as clock source, to try to resolve strange behavior around Vcc=2.5V
     
     // Set the measured channel to FVR and reference to Vdd
     ADPCH = 0b111111;
@@ -77,7 +78,7 @@ uint8_t ADC_read_vcc_fast(void)
     // Turn on FVR at 1024 mV for the ADC and wait for it to stabilize
     FVRCON = 0b10000001;
     while (!FVRRDY);
-    
+
     // Turn on ADC
     ADON = 1;
     
