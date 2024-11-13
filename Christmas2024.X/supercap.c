@@ -67,6 +67,10 @@ bool SUPERCAP_charge(void)
             {
                 newState = CAP_STATE_CHARGING_OFF;
             }
+            else if (gPrefsCache.selfTestEn)
+            {
+                newState = CAP_STATE_CHARGING_QUICKLY;
+            }
             break;
         case CAP_STATE_CHARGING_OFF:
             if (gVcc > SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MIN &&
@@ -114,15 +118,19 @@ bool SUPERCAP_charge(void)
             }
             break;
         case CAP_STATE_CHARGING_QUICKLY:
-            if (gVcc > SUPERCAP_CHRG_THRESH_FAST_TO_OFF_OVER ||
-                gVcc < SUPERCAP_CHRG_THRESH_FAST_TO_OFF_UNDER ||
-                mForceChargingStop)
+            // Don't allow us to leave the quick-charging state if we're in self-test mode
+            if (!gPrefsCache.selfTestEn)
             {
-                newState = CAP_STATE_CHARGING_OFF;
-            }
-            else if (gVcc < SUPERCAP_CHRG_THRESH_FAST_TO_SLOW)
-            {
-                newState = CAP_STATE_CHARGING_SLOWLY;
+                if (gVcc > SUPERCAP_CHRG_THRESH_FAST_TO_OFF_OVER ||
+                    gVcc < SUPERCAP_CHRG_THRESH_FAST_TO_OFF_UNDER ||
+                    mForceChargingStop)
+                {
+                    newState = CAP_STATE_CHARGING_OFF;
+                }
+                else if (gVcc < SUPERCAP_CHRG_THRESH_FAST_TO_SLOW)
+                {
+                    newState = CAP_STATE_CHARGING_SLOWLY;
+                }
             }
             break;
         default:
@@ -130,7 +138,7 @@ bool SUPERCAP_charge(void)
     }
     
     // Other actions that override state-based decisions
-    if (!gPrefsCache.supercapChrgEn)
+    if (!gPrefsCache.supercapChrgEn && !gPrefsCache.selfTestEn)
     {
         newState = CAP_STATE_CHARGING_OFF;
     }

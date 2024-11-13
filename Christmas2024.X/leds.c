@@ -16,10 +16,12 @@
 
 #define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   7 // MUST per a power of 2 - 1
 
-#define LED_HARVEST_STOKER_THRESH_LOW_MV         2300 // Should be above the voltage at which the system will be powerd on LEDs alone
+#define LED_HARVEST_STOKER_THRESH_LOW_MV        (2300) // Should be above the voltage at which the system will be powerd on LEDs alone
 #define LED_HARVEST_STOKER_TIME_LOW_MS          (18)
-#define LED_HARVEST_STOKER_THRESH_HIGH_MV       2500
+#define LED_HARVEST_STOKER_THRESH_HIGH_MV       (2500)
 #define LED_HARVEST_STOKER_TIME_HIGH_MS         (25)
+
+#define LED_SELF_TEST_TIME_MS                   (25)
 
 #define PORT_C_NON_LED_MASK  (0xFC)
 
@@ -57,6 +59,26 @@ static const led_blink_prog_step_t cLedTwinkle[LED_CYCLE_LENGTH] =
     {LED_PORT_C, 1},
     {LED_PORT_C, 3}, // "stoke" the harvest LED rail
     {LED_PORT_B, 4}, // tree star
+};
+
+static const led_blink_prog_step_t cLedSelfTest[LED_CYCLE_LENGTH] = 
+{
+    {LED_PORT_C, 3}, // "stoke" the harvest LED rail
+    {LED_PORT_B, 4}, // tree star
+    {LED_PORT_C, 0},
+    {LED_PORT_A, 4},
+    {LED_PORT_A, 5},
+    {LED_PORT_A, 7},
+    {LED_PORT_A, 2},
+    {LED_PORT_B, 5},
+    {LED_PORT_B, 3},
+    {LED_PORT_B, 1},
+    {LED_PORT_B, 0},
+    {LED_PORT_B, 2},
+    {LED_PORT_C, 3}, // "stoke" the harvest LED rail again
+    {LED_PORT_C, 1},
+    {LED_PORT_A, 1}, // RF activity
+    {LED_PORT_A, 3}, // RF ACK
 };
 
 // Variables
@@ -112,7 +134,22 @@ void LED_twinkle(void)
     // Variable length blink times, also ensuring blinkTime is non-zero
     uint8_t blinkTime = (randomInt & timeLimit) + 1;
     
-    led_blink_prog_step_t currentStep = cLedTwinkle[remainder];
+    led_blink_prog_step_t currentStep;
+    
+    if (gPrefsCache.selfTestEn)
+    {
+        // Show LEDs in sequence, ignoring the random order. Also make them
+        // super-bright
+        blinkTime = LED_SELF_TEST_TIME_MS << 2; // convert ms to timer ticks
+        currentStep = cLedSelfTest[mLedCounter % LED_CYCLE_LENGTH];
+        
+        // Always enable the harvest stoker concurrent with whatever
+        WPUC3 = 1;
+    }
+    else
+    {
+        currentStep = cLedTwinkle[remainder];
+    }
         
     switch (currentStep.port)
     {
@@ -123,7 +160,7 @@ void LED_twinkle(void)
         case LED_PORT_B:
             // Allow the tree star to be enabled or disabled
             if (currentStep.pin != TREE_STAR_PIN ||
-                gPrefsCache.treeStarEn)
+                (gPrefsCache.treeStarEn || gPrefsCache.selfTestEn))
             {
                 PORTB = (uint8_t)(1 << currentStep.pin);
                 TIMER_once(turnOffAllPortBLeds, blinkTime);

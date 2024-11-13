@@ -11,8 +11,7 @@ typedef enum
 {
     EEPROM_ADDR_FLAG,
     EEPROM_ADDR_BLINK_TIME,
-    EEPROM_ADDR_MAGIC,
-    EEPROM_ADDR_CRC,
+    EEPROM_ADDR_SELF_TEST,
     EEPROM_ADDR__LEN
 } eeprom_addrs_t;
 
@@ -21,6 +20,9 @@ typedef enum
 #define EEPROM_FLAG_HARVEST_CHRG        2
 #define EEPROM_FLAG_HARVEST_BLINK       3
 #define EEPROM_FLAG_FAST_BLINKS         4
+
+// Different byte
+#define EEPROM_FLAG_SELF_TEST           0
 
 // Typedefs
 
@@ -35,6 +37,8 @@ const prefs_t cDefaultPrefs =
     .harvestRailChargeEn = true,
     .harvestBlinkEn = true,
     .fastBlinksEn = false,
+    
+    .selfTestEn = true,
 };
 
 // CRC8 table for polynomial 0xEB, chosen because it has Hamming distance 5 for lengths up to 9 bytes
@@ -115,6 +119,22 @@ static void prefs_load(void)
         gPrefsCache.harvestRailChargeEn = cDefaultPrefs.harvestRailChargeEn;
         gPrefsCache.treeStarEn = cDefaultPrefs.treeStarEn;
     }
+    
+    uint8_t selfTestFlag = mPrefsEepromBacking[EEPROM_ADDR_SELF_TEST];
+    
+    onesCount = cSetBitsInByte[selfTestFlag];
+    
+    // We want odd parity
+    if (onesCount & 1)
+    {
+        // Valid parity, so load the values
+        gPrefsCache.selfTestEn = !!(selfTestFlag & (1 << (EEPROM_FLAG_SELF_TEST + 1)));
+    }
+    else
+    {
+        // Invalid parity, so use defaults
+        gPrefsCache.selfTestEn = cDefaultPrefs.selfTestEn;
+    }
 }
 
 //static uint8_t prefs_calc_crc(uint8_t *data, uint8_t length) 
@@ -175,6 +195,19 @@ void PREFS_update(prefs_t* pProposedSettings)
         uint8_t parity = (cSetBitsInByte[consolidatedFlags] & 1) ? 0 : 1;
         
         mPrefsEepromBacking[EEPROM_ADDR_FLAG] = (uint8_t)(consolidatedFlags << 1) | (parity & 1);
+    }
+}
+
+// Enable or disable the saved self-test mode, but not the currently active one
+// (so that self-test keeps running as long as desired)
+void PREFS_self_test_saved_state(bool enable)
+{
+    if (enable != gPrefsCache.selfTestEn)
+    {
+        // Odd parity
+        uint8_t parity = !enable; // in this case (with a bool), it's trivial
+                
+        mPrefsEepromBacking[EEPROM_ADDR_SELF_TEST] = (uint8_t)(enable << 1) | (parity & 1);
     }
 }
 

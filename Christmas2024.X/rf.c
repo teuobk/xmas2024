@@ -195,11 +195,22 @@ static bool rf_command_handler(uint8_t decodedWord)
         case CMD_UNLOCK:
             // Enable special/restricted command on the next received frame only
             // Actual flag toggle comes after this block
-            commandSuccess = false; // don't reveal it was a valid command
+            
+            // If we get two unlock commands in a row, interpret that as a reset
+            if (mCommandUnlocked)
+            {
+                RESET();
+                // never returns;
+            }
             break;
         case CMD_SELF_TEST:
-            // Start a self-test
-            // TODO
+            // Start a self-test by rebooting into self-test mode
+            if (mCommandUnlocked)
+            {
+                PREFS_self_test_saved_state(true);
+                RESET();
+                // NOTE: does not return
+            }
             break;            
         default:
             commandSuccess = false;
