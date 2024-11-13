@@ -44,7 +44,7 @@ static const led_blink_prog_step_t cLedTwinkle[LED_CYCLE_LENGTH] =
     {LED_PORT_B, 1},
     {LED_PORT_B, 4}, // tree star
     {LED_PORT_A, 2},
-    {LED_PORT_A, 6},
+    {LED_IDLE, 0},
     {LED_PORT_B, 0},
     {LED_PORT_A, 4},
     {LED_PORT_C, 0},
