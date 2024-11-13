@@ -81,7 +81,11 @@ static void turnOffAllPortALeds(void)
 // Turn off all port C LEDs. INTERRUPT CALLBACK USE ONLY.
 static void turnOffAllPortCLeds(void)
 {
-    TRISC |= (LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2);
+    // Don't disconnect the output drivers, since the very act of
+    // pulling the pin low (via the driver) is what causes the "high-side"
+    // harveset LEDs to blink
+//    TRISC |= (LED_BACKDRIVE_PIN_1 | LED_BACKDRIVE_PIN_2);
+    
     LATC = LATC & PORT_C_NON_LED_MASK; // don't spoil the non-LED pins on port C
 }
 
@@ -144,7 +148,11 @@ void LED_twinkle(void)
             }
             else if (gPrefsCache.harvestBlinkEn)
             {
+                // Don't connect the output driver until now, since that itself will
+                // cause the LEDs to blink, and we don't want that high current drain on
+                // startup
                 TRISC &= ~((uint8_t)(1 << currentStep.pin));
+                
                 // Don't spoil the non-LED pins on port C
                 LATC = (LATC & PORT_C_NON_LED_MASK) | (uint8_t)(1 << currentStep.pin);
                 TIMER_once(turnOffAllPortCLeds, blinkTime);
