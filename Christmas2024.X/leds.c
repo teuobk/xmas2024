@@ -16,8 +16,10 @@
 
 #define LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS   7 // MUST per a power of 2 - 1
 
-#define LED_HARVEST_STOKER_THRESH_MV            2300 // Should be above the voltage at which the system will be powerd on LEDs alone
-#define LED_HARVEST_STOKER_TIME_MS              (18)
+#define LED_HARVEST_STOKER_THRESH_LOW_MV         2300 // Should be above the voltage at which the system will be powerd on LEDs alone
+#define LED_HARVEST_STOKER_TIME_LOW_MS          (18)
+#define LED_HARVEST_STOKER_THRESH_HIGH_MV       2500
+#define LED_HARVEST_STOKER_TIME_HIGH_MS         (25)
 
 #define PORT_C_NON_LED_MASK  (0xFC)
 
@@ -127,11 +129,17 @@ void LED_twinkle(void)
             // Allow the harvest LEDs to be enabled or disabled
             if (currentStep.pin == HARVEST_STOKE_PIN && gPrefsCache.harvestRailChargeEn)
             {
-                if (gVcc >= LED_HARVEST_STOKER_THRESH_MV)
+                if (gVcc >= LED_HARVEST_STOKER_THRESH_HIGH_MV)
                 {
                     // "Stoke" with a weak pullup
                     WPUC3 = 1;
-                    TIMER_once(turnOffHarvestStoker, LED_HARVEST_STOKER_TIME_MS << 2);
+                    TIMER_once(turnOffHarvestStoker, LED_HARVEST_STOKER_TIME_HIGH_MS << 2);
+                }
+                else if (gVcc >= LED_HARVEST_STOKER_THRESH_LOW_MV)
+                {
+                    // "Stoke" with a weak pullup
+                    WPUC3 = 1;
+                    TIMER_once(turnOffHarvestStoker, LED_HARVEST_STOKER_TIME_LOW_MS << 2);
                 }
             }
             else if (gPrefsCache.harvestBlinkEn)
