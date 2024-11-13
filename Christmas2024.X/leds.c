@@ -196,11 +196,7 @@ void LED_twinkle(void)
             }
             break;
         case LED_IDLE:
-            // If enabled, use idle periods to backcharge the LED harvest rail
-            if (gPrefsCache.harvestRailChargeEn)
-            {
-                // TODO
-            }
+            // nop
             break;
         default:
             // nop
