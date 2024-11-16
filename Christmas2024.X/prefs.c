@@ -32,7 +32,6 @@ const prefs_t cDefaultPrefs =
 {
     .blinkTimeLimit = 7,  // MUST be a power of 2 minus 1
     
-    .supercapChrgEn = true,
     .treeStarEn = false,
     .harvestRailChargeEn = true,
     .harvestBlinkEn = true,
@@ -107,7 +106,6 @@ static void prefs_load(void)
     {
         // Valid parity, so load the values
         gPrefsCache.harvestBlinkEn = !!(booleanFlags & (1 << (EEPROM_FLAG_HARVEST_BLINK + 1)));
-        gPrefsCache.supercapChrgEn = !!(booleanFlags & (1 << (EEPROM_FLAG_SUPERCAP_CHRG + 1)));
         gPrefsCache.harvestRailChargeEn = !!(booleanFlags & (1 << (EEPROM_FLAG_HARVEST_CHRG + 1)));
         gPrefsCache.treeStarEn = !!(booleanFlags & (1 << (EEPROM_FLAG_TREE_STAR + 1)));
     }
@@ -115,7 +113,6 @@ static void prefs_load(void)
     {
         // Invalid parity, so use defaults
         gPrefsCache.harvestBlinkEn = cDefaultPrefs.harvestBlinkEn;
-        gPrefsCache.supercapChrgEn = cDefaultPrefs.supercapChrgEn;
         gPrefsCache.harvestRailChargeEn = cDefaultPrefs.harvestRailChargeEn;
         gPrefsCache.treeStarEn = cDefaultPrefs.treeStarEn;
     }
@@ -176,18 +173,15 @@ void PREFS_update(prefs_t* pProposedSettings)
     }
     
     if (pProposedSettings->harvestBlinkEn != gPrefsCache.harvestBlinkEn ||
-        pProposedSettings->supercapChrgEn != gPrefsCache.supercapChrgEn ||
         pProposedSettings->harvestRailChargeEn != gPrefsCache.harvestRailChargeEn ||
         pProposedSettings->treeStarEn != gPrefsCache.treeStarEn)
     {
         gPrefsCache.harvestBlinkEn = pProposedSettings->harvestBlinkEn;
-        gPrefsCache.supercapChrgEn = pProposedSettings->supercapChrgEn;
         gPrefsCache.harvestRailChargeEn = pProposedSettings->harvestRailChargeEn;
         gPrefsCache.treeStarEn = pProposedSettings->treeStarEn;
         
         uint8_t consolidatedFlags = (uint8_t)(
                 gPrefsCache.harvestBlinkEn << EEPROM_FLAG_HARVEST_BLINK |
-                gPrefsCache.supercapChrgEn << EEPROM_FLAG_SUPERCAP_CHRG |
                 gPrefsCache.harvestRailChargeEn << EEPROM_FLAG_HARVEST_CHRG |
                 gPrefsCache.treeStarEn << EEPROM_FLAG_TREE_STAR);
         

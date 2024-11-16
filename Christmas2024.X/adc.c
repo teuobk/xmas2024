@@ -17,12 +17,12 @@ uint16_t gVcc = 0;
 
 
 // Read Vcc in tens of mV
-// Takes about 400 us when Fosc=16MHz, almost entirely due to the division for conversion to millivolts
+// Takes about 140 us when Fosc=16MHz, almost entirely due to the division for conversion to millivolts
 uint16_t ADC_read_vcc(void)
 {
     uint16_t mv = 0;
     
-    // Set ADC clock to internal (FRC), results left-justified
+    // Set ADC clock to internal (FRC), results left-justified (the ADC has only about 8 bits ENOB anyway)
     ADCON0 = 0b00010000;
     
     // Set the measured channel to FVR and reference to Vdd
@@ -54,19 +54,91 @@ uint16_t ADC_read_vcc(void)
     // Convert the value into millivolts. Note that this isn't exactly 
     // optimal; however, it's done this way to avoid a lengthy 32-bit
     // divide, instead reducing the problem to a 16-bit divide followed by two left-rotates
-    mv = (uint16_t)(65535u/ADRESH*4u); // this nets roughly 1024*255/ADRESH in a lot fewer cycles
+    // Yhis nets roughly 1024*255/ADRESH in something like 60% fewer cycles (note in 
+    // particular the 255 vs 256 change and the limit to 16-bit math; also note that the
+    // value 1024 comes from the FVR reference voltage in millivolts)
+    mv = (uint16_t)(65535u/ADRESH*4u); 
     
     return mv;
 }
+
+// Read the supercap voltage relative to Vdd to ensure that it doesn't go above
+// 3.3 V. This takes advantage of several things: first, the supercap has relatively
+// high leakage when charged above 3.0 V (tens of microamps); second, the supercap
+// has an ESR of about 100 ohms; third, the drop across the diode for charging the
+// supercap is between about 100 mV (at If=100nA) and about 370 mV (at If=1mA).
+// If we assume that leakage across the cap at high charge voltages will keep the 
+// charge current above 1uA, then Vf will always be 173 mV or larger.
+// 
+// So, we use this measurement for two things. First, we check to make sure we
+// always have 1 uA or more of current going to the supercap when Vdd is above 3300 mV.
+// Since it's a 3300 ohm shunt resistor, that's 3.3 mV. That's about 1 ADC count
+// when Vdd is 3300 mV and we're in 10-bit mode (3300 / 1024 ~= 3.3) -- except
+// that's into the ADC noise. The minimum realistic change we can detect is about
+// 3300 / 256 ~= 13 mV => 4 uA charge current, so let's look for that instead.
+// (Possible complication: the current consumed by the ADC itself, which is likely to
+// be more than 4 uA when the input is connected)
+//
+// Thinking about this more: just assume the drop across the diode to the supercap
+// is going to be at least 200 mV, so the value here needs to be equivalent to 
+// no more than 3300 + 200 = 3500 mV.
+// 
+// Thus: if Vdd <= 3500 mV, there's never a problem
+// 
+// To keep it simple, look for the delta in counts to be at least (Vdd-3500)/16
+// So, for example, if Vdd = 3550 mV, (3550-3500)/16 = 3 counts. As long as the delta
+// is greater than the one calculated in this manner, the supercap won't see more
+// than 3300 mV.
+uint8_t ADC_read_supercap_relative(void)
+{
+    uint8_t countsDownFromVdd = 0;
+    
+    // Set ADC clock to internal (FRC), results left-justified 
+    ADCON0 = 0b00010000;
+    
+    // Set the measured channel to ANC5 and reference to Vdd
+    ADPCH = 0b010101;
+    ADREF = 0b00000000;
+    
+    // Set acquisition time to 30 ADC clocks (30 us) (based on the net 13 kOhm impedance)
+    ADACQ = 30;
+        
+    // Turn on ADC
+    ADON = 1;
+    
+    // Start conversion
+    ADGO = 1;
+    
+    // Wait for completion
+    while (ADGO);
+    
+    // Turn off ADC
+    ADON = 0;
+    
+    countsDownFromVdd = UINT8_MAX - ADRESH;
+    
+    return countsDownFromVdd;
+}
+
 
 // Read Vcc in counts, trying for maximum noise
 // Takes about 9 us when Fosc=16MHz
 uint8_t ADC_read_vcc_fast(void)
 {
-    // Set ADC clock to Fosc (so that we get a noisy result and don't have to turn on another oscillator),
-    // results right-justified (we want the noisy bits), and turn the module on
-//    ADCON0 = 0b10000100;
-    ADCON0 = 0b10010100; // Frc as clock source, to try to resolve strange behavior around Vcc=2.5V
+    // Frc as clock source. Earlier, Fosc/2 had been used as the ADC clock source,
+    // but when Vcc is at about 2.50 V +/- 0.05 V, then sometimes (not always, but
+    // often) the ADC conversion will fail to complete, and the system will hang
+    // waiting for ADGO to go low. It's really strange. At 2.6 V or above, everything
+    // is rock-solid, and at 2.4 V or below, everything is also rock-solid, but
+    // there's something weird about being at 2.5 V. This one took A VERY LONG TIME
+    // to figure out, not least because this function is called only when entropy
+    // is needed for the PRNG, which happens only every 12 seconds or so of
+    // continuous uptime. I had seen some odd behavior while running on a very charged
+    // supercap, in which the system would suddenly die and then reboot about 2 seconds
+    // later, but it took putting the system on a bench supply and watching the KEEP_ON
+    // line to realize that it was actually hanging and getting reset by the watchdog.
+    // Changing to the Frc clock source fixes the issue. 
+    ADCON0 = 0b10010100; 
     
     // Set the measured channel to FVR and reference to Vdd
     ADPCH = 0b111111;

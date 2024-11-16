@@ -61,8 +61,8 @@ typedef enum
     CMD_PWR_NORM = 0,
     CMD_PWR_ULTRAHIGH = 1,
 
-    CMD_SUPERCAP_CHRG_DIS = 2,
-    CMD_SUPERCAP_CHRG_EN = 3,
+    CMD_RESERVED_0 = 2,
+    CMD_RESERVED_1 = 3,
 
     CMD_TREE_STAR_DIS = 4,
     CMD_TREE_STAR_EN = 5,
@@ -136,12 +136,6 @@ static bool rf_command_handler(uint8_t decodedWord)
 
     switch (decodedWord)
     {
-//        case CMD_PWR_ULTRALOW:
-//            // Time limit 500 us, no harvest LED blinks
-//            prefsTemp.blinkTimeLimit = 1;
-//            prefsTemp.harvestBlinkEn = false;
-//            prefsTemp.harvestRailChargeEn = false;
-//            break;
         case CMD_PWR_NORM:
             // Time limit 1500 us, harvest LED blinks OK
             prefsTemp.blinkTimeLimit = 7; // MUST be a power of 2 minus 1
@@ -149,40 +143,12 @@ static bool rf_command_handler(uint8_t decodedWord)
             prefsTemp.harvestRailChargeEn = true;
             prefsTemp.fastBlinksEn = false;
             break;
-//        case CMD_PWR_HIGH:
-//            // Time limit 3000 us, harvest LED blinks OK, drive harvest high-side
-//            prefsTemp.blinkTimeLimit = 7; // MUST be a power of 2 minus 1
-//            prefsTemp.harvestBlinkEn = true;
-//            prefsTemp.harvestRailChargeEn = true;
-//            break;
         case CMD_PWR_ULTRAHIGH:
             // Time limit 5000 us, harvest LED blinks OK, drive harvest high-side
             prefsTemp.blinkTimeLimit = 31; // MUST be a power of 2 minus 1
             prefsTemp.harvestBlinkEn = true;
             prefsTemp.harvestRailChargeEn = true;
             prefsTemp.fastBlinksEn = true;
-            break;
-        case CMD_SUPERCAP_CHRG_DIS:
-            if (mCommandUnlocked)
-            {
-                // Disable charging of the supercap
-                prefsTemp.supercapChrgEn = false;
-            }
-            else
-            {
-                commandSuccess = false;
-            }
-            break;
-        case CMD_SUPERCAP_CHRG_EN:
-            if (mCommandUnlocked)
-            {
-                // Enable charging of the supercap
-                prefsTemp.supercapChrgEn = true;
-            }
-            else
-            {
-                commandSuccess = false;
-            }
             break;
         case CMD_TREE_STAR_DIS:
             // Disable the tree star
@@ -224,6 +190,8 @@ static bool rf_command_handler(uint8_t decodedWord)
     }        
     else
     {
+        // The "unlocked" state persists for exactly one command, even if it's 
+        // not a command relevant to being unlocked
         mCommandUnlocked = false;
     }
     
@@ -280,7 +248,7 @@ static bool rf_frame_decode(uint64_t frameBits)
     for (uint8_t i = 0; i < RF_CODEWORD__NUM; i++)
     {
         // Skip some codes we don't actually want to support right now
-        if (i == CMD_SUPERCAP_CHRG_DIS || i == CMD_SUPERCAP_CHRG_EN)
+        if (i == CMD_RESERVED_0 || i == CMD_RESERVED_1)
         {
             continue;
         }

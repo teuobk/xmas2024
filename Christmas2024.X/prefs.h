@@ -9,7 +9,6 @@ typedef struct
 {
     uint8_t     blinkTimeLimit;
     
-    bool        supercapChrgEn;
     bool        treeStarEn;
     bool        harvestRailChargeEn;
     bool        harvestBlinkEn;

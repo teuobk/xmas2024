@@ -5,16 +5,28 @@
 
 // Macros and constants
 
+// The minimum forward drop of the schottky diode during charging
+// (This is actually the value at about 4 uA of charging current)
+#define DIODE_DROP_MIN                              (200)
+
+// Max charge of the supercap without damage
+#define SUPERCAP_MAX_MV                             (3300)
+
+// This constant converts the difference between Vcc and the supercap 
+// damage threshold (including diode drop) in millivolts into a number
+// of counts that can be directly compared to the 8-bit measurement of
+// the supercap charge-monitor pin
+#define MV_TO_COUNTS_FOR_RELATIVE_SUPERCAP          (16)
+
 // Supercap charging action thresholds [mV]
 #define SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MIN        (2700)
-#define SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MAX        (3600)
 
 #define SUPERCAP_CHRG_THRESH_SLOW_TO_OFF_UNDER      (2500)
-#define SUPERCAP_CHRG_THRESH_SLOW_TO_OFF_OVER       (3600)
+#define SUPERCAP_CHRG_THRESH_SLOW_TO_OFF_OVER       (SUPERCAP_MAX_MV + DIODE_DROP_MIN)
 #define SUPERCAP_CHRG_THRESH_SLOW_TO_FAST           (2950)
 
 
-#define SUPERCAP_CHRG_THRESH_FAST_TO_OFF_OVER       (3600)
+#define SUPERCAP_CHRG_THRESH_FAST_TO_OFF_OVER       (SUPERCAP_MAX_MV + DIODE_DROP_MIN)
 #define SUPERCAP_CHRG_THRESH_FAST_TO_OFF_UNDER      (2500)
 #define SUPERCAP_CHRG_THRESH_FAST_TO_SLOW           (2700)
 
@@ -45,6 +57,29 @@ static bool mForceChargingStop = false;
 
 // Implementations
 
+// Check if we're in danger of overcharging the cap
+static bool supercap_charge_too_high(void)
+{
+    bool tooHigh = false;
+    
+    if (gVcc > (SUPERCAP_MAX_MV + DIODE_DROP_MIN))
+    {
+        // We have a high voltage, and we're currently charging, so check
+        // that we're not overcharging the cap (i.e., exceeding 3300 mV)
+        uint8_t countsDown = ADC_read_supercap_relative();
+
+        uint8_t threshold = (uint8_t)((gVcc - (SUPERCAP_MAX_MV + DIODE_DROP_MIN)) / MV_TO_COUNTS_FOR_RELATIVE_SUPERCAP);
+
+        if (countsDown <= threshold)
+        {
+            // Voltage is too high (implying cap is already pretty highly charged anyway)
+            tooHigh = true;
+        }
+    }    
+    
+    return tooHigh;
+}
+
 // Force supercap charging to stop temporarily
 void SUPERCAP_force_charging_off(void)
 {
@@ -73,8 +108,7 @@ bool SUPERCAP_charge(void)
             }
             break;
         case CAP_STATE_CHARGING_OFF:
-            if (gVcc > SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MIN &&
-                gVcc < SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MAX)
+            if (gVcc > SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MIN)
             {
                 // Have we had a stable voltage long enough to justify starting charging?
                 if (sTicksVoltageGoodForUpshift > TICKS_STABLE_FOR_OFF_TO_SLOW)
@@ -95,8 +129,8 @@ bool SUPERCAP_charge(void)
             break;
         case CAP_STATE_CHARGING_SLOWLY:
             if (gVcc < SUPERCAP_CHRG_THRESH_SLOW_TO_OFF_UNDER ||
-                gVcc > SUPERCAP_CHRG_THRESH_SLOW_TO_OFF_OVER ||
-                mForceChargingStop)
+                mForceChargingStop ||
+                supercap_charge_too_high())
             {
                 newState = CAP_STATE_CHARGING_OFF;
             }
@@ -118,12 +152,20 @@ bool SUPERCAP_charge(void)
             }
             break;
         case CAP_STATE_CHARGING_QUICKLY:
-            // Don't allow us to leave the quick-charging state if we're in self-test mode
-            if (!gPrefsCache.selfTestEn)
+            // Don't allow us to leave the quick-charging state if we're in self-test mode unless we're
+            // going to overcharge the cap or we're trying to get out of the mode
+            if (gPrefsCache.selfTestEn)
             {
-                if (gVcc > SUPERCAP_CHRG_THRESH_FAST_TO_OFF_OVER ||
-                    gVcc < SUPERCAP_CHRG_THRESH_FAST_TO_OFF_UNDER ||
-                    mForceChargingStop)
+                if (supercap_charge_too_high() || mForceChargingStop)
+                {
+                    newState = CAP_STATE_CHARGING_OFF;
+                }
+            }
+            else
+            {
+                if (gVcc < SUPERCAP_CHRG_THRESH_FAST_TO_OFF_UNDER ||
+                    mForceChargingStop ||
+                    supercap_charge_too_high())
                 {
                     newState = CAP_STATE_CHARGING_OFF;
                 }
@@ -135,12 +177,6 @@ bool SUPERCAP_charge(void)
             break;
         default:
             break;
-    }
-    
-    // Other actions that override state-based decisions
-    if (!gPrefsCache.supercapChrgEn && !gPrefsCache.selfTestEn)
-    {
-        newState = CAP_STATE_CHARGING_OFF;
     }
     
     // Action based on the new state
@@ -180,6 +216,8 @@ bool SUPERCAP_charge(void)
     
     isCharging = (mCapStateMachineState == CAP_STATE_CHARGING_SLOWLY ||
                   mCapStateMachineState == CAP_STATE_CHARGING_QUICKLY);
+
+    DEBUG_VALUE(isCharging);
     
     mForceChargingStop = false;
                 
