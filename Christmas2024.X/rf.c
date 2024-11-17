@@ -19,9 +19,6 @@
 
 #define NUM_SAMPLES_TO_AVERAGE_FOR_SLICER   (8) // must be power of 2
 
-// Don't bother looking for RF traffic if the RF level isn't very high to begin with
-#define RF_LEVEL_MIN_FOR_COMMS_COUNTS       (32)
-
 // Correlation threshold for the preamble to be considered a match. Note that
 // this is interpretted on a per-sample basis, not a per-bit basis, as we
 // want to use this Barker code for clock sync

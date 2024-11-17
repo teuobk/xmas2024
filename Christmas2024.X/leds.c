@@ -1,6 +1,7 @@
 #include "leds.h"
 #include "global.h"
 #include "adc.h"
+#include "rf.h"
 #include "prefs.h"
 
 // Macros and constants
@@ -215,20 +216,34 @@ void LED_twinkle(void)
 void LED_show_power(uint8_t powerLevel)
 {
     static uint8_t sCallCount = 0;
-#define NUM_POWER_LEVELS  (4)
 
     // Don't bother doing extra calculations if we're not going to show anything anyway
-    if (powerLevel > ((UINT8_MAX + 1) / NUM_POWER_LEVELS))
+    if (powerLevel > RF_LEVEL_MIN_FOR_COMMS_COUNTS)
     {
-        uint8_t powerLevelScaled = powerLevel / ((UINT8_MAX+1) / NUM_POWER_LEVELS);
+        uint8_t powerLevelScaled = 0;
+
+        // Warning, magic numbers!
+        if (powerLevel < (((UINT8_MAX+1) / 3)*1))
+        {
+            powerLevelScaled = 1;
+        }
+        else if (powerLevel < (((UINT8_MAX+1) / 3)*2))
+        {
+            powerLevelScaled = 2;
+        }
+        else
+        {
+            powerLevelScaled = 3;
+        }
+        
         if (sCallCount < powerLevelScaled)
         {    
             PORTA = (uint8_t)(1 << RF_LVL_LED_PIN);
             TIMER_once(turnOffAllPortALeds, RF_LVL_BLINK_DURATION);
         }
     }
-    
-    sCallCount = (sCallCount + 1) % (NUM_POWER_LEVELS * 4);
+#define NUM_POWER_LEVELS_INCLUDING_OFF  (4)
+    sCallCount = (sCallCount + 1) % (NUM_POWER_LEVELS_INCLUDING_OFF * 4);
 }
 
 // Blink the RF command ACK LED
