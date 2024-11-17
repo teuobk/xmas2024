@@ -196,12 +196,16 @@ void PREFS_update(prefs_t* pProposedSettings)
 // (so that self-test keeps running as long as desired)
 void PREFS_self_test_saved_state(bool enable)
 {
-    if (enable != gPrefsCache.selfTestEn)
+    static bool sAlreadyUpdatedSelfTestState = false;
+    
+    // Don't write the self-test flag repeatedly; once is enough
+    if (enable != gPrefsCache.selfTestEn && !sAlreadyUpdatedSelfTestState)
     {
         // Odd parity
         uint8_t parity = !enable; // in this case (with a bool), it's trivial
                 
         mPrefsEepromBacking[EEPROM_ADDR_SELF_TEST] = (uint8_t)(enable << 1) | (parity & 1);
+        sAlreadyUpdatedSelfTestState = true;
     }
 }
 
