@@ -193,19 +193,26 @@ void PREFS_update(prefs_t* pProposedSettings)
 }
 
 // Enable or disable the saved self-test mode, but not the currently active one
-// (so that self-test keeps running as long as desired)
+// (so that self-test keeps running as long as desired). In other words, DON'T
+// change gPrefsCache.selfTestEn here!
 void PREFS_self_test_saved_state(bool enable)
 {
-    static bool sAlreadyUpdatedSelfTestState = false;
+    static uint8_t sLastTempSetState = UINT8_MAX;
+    
+    // Workaround since we can't initialize with a non-const value
+    if (sLastTempSetState == UINT8_MAX)
+    {
+        sLastTempSetState = gPrefsCache.selfTestEn;
+    }
     
     // Don't write the self-test flag repeatedly; once is enough
-    if (enable != gPrefsCache.selfTestEn && !sAlreadyUpdatedSelfTestState)
+    if (enable != sLastTempSetState)
     {
         // Odd parity
         uint8_t parity = !enable; // in this case (with a bool), it's trivial
                 
         mPrefsEepromBacking[EEPROM_ADDR_SELF_TEST] = (uint8_t)(enable << 1) | (parity & 1);
-        sAlreadyUpdatedSelfTestState = true;
+        sLastTempSetState = enable;
     }
 }
 

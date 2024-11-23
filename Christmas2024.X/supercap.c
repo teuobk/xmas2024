@@ -15,8 +15,10 @@
 // This constant converts the difference between Vcc and the supercap 
 // damage threshold (including diode drop) in millivolts into a number
 // of counts that can be directly compared to the 8-bit measurement of
-// the supercap charge-monitor pin
-#define MV_TO_COUNTS_FOR_RELATIVE_SUPERCAP          (16)
+// the supercap charge-monitor pin, most accurately valid at Vcc=3600 mV
+// (for Vcc=3300 mV, this value shoudl be closer to 12, but since we only
+// care about it when Vcc >= 3500 mV, this approximation is good enoguh)
+#define MV_TO_COUNTS_FOR_RELATIVE_SUPERCAP          (14)
 
 // Supercap charging action thresholds [mV]
 #define SUPERCAP_CHRG_THRESH_OFF_TO_SLOW_MIN        (2700)
@@ -51,9 +53,11 @@ static cap_charging_state_t mCapStateMachineState = CAP_STATE_BOOTUP;
 
 static uint32_t mTicksAtStateEntry = 0;
 
-static bool mLastCharging = false;
+static bool mIsCharging = false;
 
 static bool mForceChargingStop = false;
+
+static uint8_t mLastCountsDown = 0;
 
 // Implementations
 
@@ -61,16 +65,17 @@ static bool mForceChargingStop = false;
 static bool supercap_charge_too_high(void)
 {
     bool tooHigh = false;
-    
+
     if (gVcc > (SUPERCAP_MAX_MV + DIODE_DROP_MIN))
     {
         // We have a high voltage, and we're currently charging, so check
-        // that we're not overcharging the cap (i.e., exceeding 3300 mV)
-        uint8_t countsDown = ADC_read_supercap_relative();
-
+        // that we're not overcharging the cap (i.e., exceeding 3300 mV)        
+        
+        mLastCountsDown = ADC_read_supercap_relative();
+    
         uint8_t threshold = (uint8_t)((gVcc - (SUPERCAP_MAX_MV + DIODE_DROP_MIN)) / MV_TO_COUNTS_FOR_RELATIVE_SUPERCAP);
 
-        if (countsDown <= threshold)
+        if (mLastCountsDown <= threshold)
         {
             // Voltage is too high (implying cap is already pretty highly charged anyway)
             tooHigh = true;
@@ -91,7 +96,7 @@ void SUPERCAP_force_charging_off(void)
 bool SUPERCAP_charge(void)
 {
     static uint8_t sTicksVoltageGoodForUpshift = 0;
-    bool isCharging = mLastCharging;
+    bool isCharging = mIsCharging;
     cap_charging_state_t newState = mCapStateMachineState;
     
     // Action based on the current state, including updates to the state
@@ -156,6 +161,9 @@ bool SUPERCAP_charge(void)
             // going to overcharge the cap or we're trying to get out of the mode
             if (gPrefsCache.selfTestEn)
             {
+                // Force an update to allow us to check for charging success in self-test mode
+                mLastCountsDown = ADC_read_supercap_relative();
+                
                 if (supercap_charge_too_high() || mForceChargingStop)
                 {
                     newState = CAP_STATE_CHARGING_OFF;
@@ -214,13 +222,33 @@ bool SUPERCAP_charge(void)
         mCapStateMachineState = newState;
     }
     
-    isCharging = (mCapStateMachineState == CAP_STATE_CHARGING_SLOWLY ||
-                  mCapStateMachineState == CAP_STATE_CHARGING_QUICKLY);
+    mIsCharging = (mCapStateMachineState == CAP_STATE_CHARGING_SLOWLY ||
+                   mCapStateMachineState == CAP_STATE_CHARGING_QUICKLY);
 
     DEBUG_VALUE(isCharging);
-    
+        
     mForceChargingStop = false;
                 
-    return isCharging;
+    return mIsCharging;
 }
 
+// Returns the latest delta between Vcc and the supercap (including one forward
+// diode drop). For example, if the voltage of the supercap plus the diode drop
+// equals Vcc (implying that the supercap is fully charged), this value will be
+// 0. Conversely, if the supercap is fully discharged, this value will be 
+// approximately one diode drop from 255 -- through note that the meaning of
+// one LSB here in voltage terms is obviously entirely dependent on the current
+// value of Vcc. Also note that this value is valid only while actively charging,
+// since we cannot observe the supercap voltage directly.
+uint8_t SUPERCAP_get_latest_voltage_delta(void)
+{
+    if (mIsCharging)
+    {
+        return mLastCountsDown;
+    }
+    else
+    {
+        return 0;
+    }
+}
+        

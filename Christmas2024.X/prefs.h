@@ -3,8 +3,6 @@
 
 #include "global.h"
 
-#define SELF_TEST_TIMEOUT_TICKS  (TICKS_PER_SEC * 3)
-
 typedef struct  
 {
     uint8_t     blinkTimeLimit;

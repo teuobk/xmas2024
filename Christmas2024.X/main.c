@@ -6,6 +6,7 @@
 #include "leds.h"
 #include "rf.h"
 #include "supercap.h"
+#include "self_test.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -217,14 +218,12 @@ void system_tick_handler(void)
     // be in an extremely compromised power state
     if (gTickCount > (1*TICKS_PER_SEC))
     {
-        // Automatically modify self-test mode so that it runs on the first sustained
-        // startup (ignoring quick post-programming resets) and then won't run again
-        // after the system has had at least one decent period while powered up
-        if (gPrefsCache.selfTestEn && gTickCount > SELF_TEST_TIMEOUT_TICKS)
+        // Service self-test mode if it's still relevant
+        if (gPrefsCache.selfTestEn)
         {
-            PREFS_self_test_saved_state(false);
+            SELF_TEST_state_machine_update();
         }
-        
+                
         // Measure VDD with the ADC using the FVR about once every other second or on every tick 
         // if we're charging the supercap (so as to avoid brownout), but not just after startup
         if (gTickCount % SAMPLE_VCC_EVERY_TICKS == 0 ||
@@ -261,7 +260,14 @@ void system_tick_handler(void)
     {
         if (!mpTimerExpireCallback)
         {
-            LED_show_power(sRfLevel);
+            if (gPrefsCache.selfTestEn)
+            {
+                LED_show_self_test();
+            }
+            else
+            {
+                LED_show_power(sRfLevel);
+            }
         }
     }
     

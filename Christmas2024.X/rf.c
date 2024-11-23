@@ -376,3 +376,8 @@ uint8_t RF_update_slicer_level(void)
     
     return mRfLevelPeak;
 }
+
+uint8_t RF_get_latest_slicer_level(void)
+{
+    return mRfLevelPeak;
+}

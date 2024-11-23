@@ -9,5 +9,6 @@
 
 void RF_sample_bit(void);
 uint8_t RF_update_slicer_level(void);
+uint8_t RF_get_latest_slicer_level(void);
 
 #endif

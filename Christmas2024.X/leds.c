@@ -3,6 +3,7 @@
 #include "adc.h"
 #include "rf.h"
 #include "prefs.h"
+#include "self_test.h"
 
 // Macros and constants
 
@@ -22,7 +23,9 @@
 #define LED_HARVEST_STOKER_THRESH_HIGH_MV       (2500)
 #define LED_HARVEST_STOKER_TIME_HIGH_MS         (25)
 
-#define LED_SELF_TEST_TIME_MS                   (25)
+#define LED_SELF_TEST_LED_TEST_TIME_MS          (25)
+
+#define LED_SELF_TEST_STATUS_TIME_MS            (10)
 
 #define PORT_C_NON_LED_MASK  (0xFC)
 
@@ -78,8 +81,8 @@ static const led_blink_prog_step_t cLedSelfTest[LED_CYCLE_LENGTH] =
     {LED_PORT_B, 2},
     {LED_PORT_C, 3}, // "stoke" the harvest LED rail again
     {LED_PORT_C, 1},
-    {LED_PORT_A, 1}, // RF activity
-    {LED_PORT_A, 3}, // RF ACK
+    {LED_IDLE, 0}, // RF activity LED is tested as part of the self-test state machine
+    {LED_IDLE, 0}, // RF ACK LED is tested as part of the self-test state machine
 };
 
 // Variables
@@ -141,7 +144,7 @@ void LED_twinkle(void)
     {
         // Show LEDs in sequence, ignoring the random order. Also make them
         // super-bright
-        blinkTime = LED_SELF_TEST_TIME_MS << 2; // convert ms to timer ticks
+        blinkTime = LED_SELF_TEST_LED_TEST_TIME_MS << 2; // convert ms to timer ticks
         currentStep = cLedSelfTest[mLedCounter % LED_CYCLE_LENGTH];
         
         // Always enable the harvest stoker concurrent with whatever
@@ -245,6 +248,36 @@ void LED_show_power(uint8_t powerLevel)
 #define NUM_POWER_LEVELS_INCLUDING_OFF  (4)
     sCallCount = (sCallCount + 1) % (NUM_POWER_LEVELS_INCLUDING_OFF * 4);
 }
+
+// Show the self-test state using the RF level LED
+void LED_show_self_test(void)
+{
+    static uint8_t sCallCount = 0;
+    
+    self_test_step_t currentStep = SELF_TEST_get_current_step();
+
+    if (gPrefsCache.selfTestEn)
+    {
+        // Show the current step if the test hasn't completed, or blink green if it has
+        if (currentStep < STS_COMPLETE)
+        {
+            // Test not yet completed
+            if (sCallCount <= currentStep)
+            {    
+                PORTA = (uint8_t)(1 << RF_LVL_LED_PIN);
+                TIMER_once(turnOffAllPortALeds, LED_SELF_TEST_STATUS_TIME_MS);
+            }
+        }
+        else
+        {
+            PORTA = (uint8_t)(1 << RF_ACK_LED_PIN);
+            TIMER_once(turnOffAllPortALeds, LED_SELF_TEST_STATUS_TIME_MS);
+        }        
+    }
+
+    sCallCount = (sCallCount + 1) % (STS__NUM * 4);
+}
+
 
 // Blink the RF command ACK LED
 void LED_blink_ack(void)
