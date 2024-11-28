@@ -74,7 +74,6 @@ void SELF_TEST_state_machine_update(void)
             // brand-new board, and even on a used board it's likely that the
             // supercap will discharge somewhat within a very reasonable period
             // of time.
-            // TODO
             {   
                 uint8_t latestSupercapDelta = SUPERCAP_get_latest_voltage_delta();
                 

@@ -54,10 +54,9 @@ uint16_t ADC_read_vcc(void)
     // Convert the value into millivolts. Note that this isn't exactly 
     // optimal; however, it's done this way to avoid a lengthy 32-bit
     // divide, instead reducing the problem to a 16-bit divide followed by two left-rotates
-    // Yhis nets roughly 1024*255/ADRESH in something like 60% fewer cycles (note in 
-    // particular the 255 vs 256 change and the limit to 16-bit math; also note that the
-    // value 1024 comes from the FVR reference voltage in millivolts)
-    mv = (uint16_t)(65535u/ADRESH*4u); 
+    // This nets roughly 1024*255/ADRESH in something like 60% fewer cycles 
+    // (note that the value 1024 comes from the FVR reference voltage in millivolts)
+    mv = (uint16_t)(65535u/ADRESH*4u); // TODO: should be 65280
     
     return mv;
 }
@@ -174,7 +173,6 @@ uint8_t ADC_read_vcc_fast(void)
 uint8_t ADC_read_rf(void)
 {
     // Set ADC clock to internal (FRC), results left-justified
-    // TODO: Why not use Fosc?
     ADCON0 = 0b00010000;
     
     // Set the measured channel to RA0 (ANA0) and reference to Vdd
@@ -207,7 +205,6 @@ uint8_t ADC_random_int(void)
     // This next line is equivalent to feedback = ((mRandomState >> 6) ^ (mRandomState >> 5)) & 1;
     // except that it reduces the number of shifts, which must be done one at a time
     // on this platform in loops (we save at least 24 machine cycles this way)
-//    uint8_t feedback = ((mRandomState >> 6) ^ (mRandomState >> 5)) & 1;
     uint8_t feedback = !!(((mRandomState >> 1) ^ mRandomState) & 0b00100000);
 
     // Shift the register and insert feedback at the lowest bit
