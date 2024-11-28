@@ -86,7 +86,7 @@ void setup(void)
     SLRCONB = 0xFF; // limit all PORTB
     SLRCONA = 0xFF; // limit all PORTA
     
-    // Weak pull-ups all off (should be automatic?)
+    // Weak pull-ups all off (enabled as needed elsewhere)
     
     
     //
@@ -112,7 +112,10 @@ void setup(void)
     // Power and interrupts
     //
     
-    // Disable clocking to modules we're not using
+    // Disable clocking to modules we're not using using the "Peripheral Module Disable" feature
+    // of the PIC16LF18854. Disabling the modules below, with a 20 Hz system tick at 16 MHz with
+    // the interstitial periods at 15.5 kHz, resulted in a current-consumption reduction at 2.0 V
+    // of about 750 nA (versus not disabling these modules with PMD)
     PMD0 = 0b00011011; // Disable CRC module, program memory scanner, clock reference, GPIO interrupt-on-change
     PMD1 = 0b10111110; // Disable all timers except TMR6 and TMR0
     PMD2 = 0b00000001; // Disable zero-crossing detector
