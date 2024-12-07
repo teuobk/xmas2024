@@ -136,7 +136,7 @@ void LED_twinkle(void)
     timeLimit = (gVcc < LED_BLINK_LOW_THRESH_MV) ? MIN(timeLimit, LED_BLINK_TIME_LIMIT_HARSH_SITUATIONS) : timeLimit;
     
     // Variable length blink times, also ensuring blinkTime is non-zero
-    uint8_t blinkTime = (randomInt & timeLimit) + 1;
+    uint8_t blinkTime = ((randomInt ^ (randomInt >> 1)) & timeLimit) + 1;
     
     led_blink_prog_step_t currentStep;
     
