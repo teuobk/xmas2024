@@ -20,7 +20,7 @@
 
 #define LED_HARVEST_STOKER_THRESH_LOW_MV        (2300) // Should be above the voltage at which the system will be powerd on LEDs alone
 #define LED_HARVEST_STOKER_TIME_LOW_MS          (18)
-#define LED_HARVEST_STOKER_THRESH_HIGH_MV       (2500)
+#define LED_HARVEST_STOKER_THRESH_HIGH_MV       (2800) 
 #define LED_HARVEST_STOKER_TIME_HIGH_MS         (25)
 
 #define LED_SELF_TEST_LED_TEST_TIME_MS          (25)
