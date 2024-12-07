@@ -225,7 +225,7 @@ bool SUPERCAP_charge(void)
     mIsCharging = (mCapStateMachineState == CAP_STATE_CHARGING_SLOWLY ||
                    mCapStateMachineState == CAP_STATE_CHARGING_QUICKLY);
 
-    DEBUG_VALUE(isCharging);
+//    DEBUG_VALUE(isCharging);
         
     mForceChargingStop = false;
                 

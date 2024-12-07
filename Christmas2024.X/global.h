@@ -23,7 +23,7 @@
 
 #define DEBUG_SET()         LATC = (LATC | DEBUG_PIN)
 #define DEBUG_CLEAR()       LATC = (LATC & ~(DEBUG_PIN))
-#define DEBUG_VALUE(_x)     LATC = (LATC & ~(DEBUG_PIN)) | (!_x - 1)
+#define DEBUG_VALUE(_x)     LATC = (LATC & ~(DEBUG_PIN)) | ((!_x - 1) & (DEBUG_PIN))
 
 
 const uint8_t cSetBitsInByte[256] = {
